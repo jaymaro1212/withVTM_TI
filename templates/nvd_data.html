@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>
+    {% if endpoint == '/api/cves' %}
+      CVE 관리
+    {% elif endpoint == '/api/cpes' %}
+      CPE 관리
+    {% else %}
+      RPM 관리
+    {% endif %}
+  </title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container mt-5">
+  <h1 class="text-center mb-4">
+    {% if endpoint == '/api/cves' %}
+      CVE 관리
+    {% elif endpoint == '/api/cpes' %}
+      CPE 관리
+    {% else %}
+      RPM 관리
+    {% endif %}
+  </h1>
+
+  <form method="get" action="" class="d-flex justify-content-center mb-3">
+    <input type="text" name="query" value="{{ query }}" placeholder="검색어" class="form-control w-50 me-2">
+    <button type="submit" class="btn btn-primary me-2">검색</button>
+    <button type="button" class="btn btn-warning" id="bulk-edit-btn">수정</button>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover text-nowrap">
+      <thead class="table-dark text-center" id="table-head"></thead>
+      <tbody id="table-body"><tr><td colspan='100%'>⏳ 로딩 중...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let endpoint = "{{ endpoint }}";
+let query = "{{ query }}";
+
+function renderTable(data) {
+  const $head = $("#table-head");
+  const $body = $("#table-body");
+
+  if (!data || data.length === 0) {
+    $head.html("");
+    $body.html("<tr><td colspan='100%'>결과 없음</td></tr>");
+    return;
+  }
+
+  const keys = Object.keys(data[0]);
+  $head.html("<tr><th><input type='checkbox' id='select-all'></th>" + keys.map(k => `<th>${k}</th>`).join("") + "</tr>");
+
+  const rows = data.map(row => {
+    const rowId = row.cve_id || row.cpe_id || row.rpm_info;
+    const cells = keys.map(k => `<td>${row[k]}</td>`).join("");
+    return `<tr><td class='text-center'><input type='checkbox' class='row-checkbox' data-id='${rowId}' data-row='${encodeURIComponent(JSON.stringify(row))}'></td>${cells}</tr>`;
+  });
+  $body.html(rows.join(""));
+
+  $("#select-all").on("change", function() {
+    $(".row-checkbox").prop("checked", this.checked);
+  });
+}
+
+function loadData() {
+  const $head = $("#table-head");
+  const $body = $("#table-body");
+  $head.html("");
+  $body.html("<tr><td colspan='100%'>⏳ 로딩 중...</td></tr>");
+
+  const q = query.trim();
+  const url = q ? `${endpoint}?query=${encodeURIComponent(q)}` : `${endpoint}?query=`;
+
+  // fetch 지연 없이 동작시키기 위해 setTimeout 사용
+  setTimeout(async () => {
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      renderTable(json.data || []);
+    } catch (err) {
+      $head.html("");
+      $body.html("<tr><td colspan='100%'>❌ 오류 발생</td></tr>");
+      console.error("데이터 로딩 오류:", err);
+    }
+  }, 0);
+}
+
+$("form").on("submit", function(e) {
+  e.preventDefault();
+  query = $("input[name='query']").val();
+  loadData();
+});
+
+$("#bulk-edit-btn").on("click", function() {
+  const checked = $(".row-checkbox:checked");
+  if (checked.length === 0) return alert("수정할 행을 선택하세요.");
+  const field = prompt("수정할 필드명:", "description");
+  if (!field) return;
+  const value = prompt(`새 값 (${field}):`);
+  if (value == null) return;
+
+  checked.each(function() {
+    const row = JSON.parse(decodeURIComponent($(this).data("row")));
+    const id = row.cve_id || row.cpe_id || row.rpm_info;
+    fetch("/api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        table: (
+          endpoint === "/api/cves" ? "nvd_cve" :
+          endpoint === "/api/cpes" ? "nvd_cpe" :
+          "nvd_rpm"
+        ),
+        cve_id: id,
+        updates: { [field]: value }
+      })
+    }).then(res => res.json())
+      .then(json => {
+        if (json.status !== "success") {
+          alert("수정 실패: " + (json.detail || "에러"));
+        } else {
+          loadData();
+        }
+      });
+  });
+});
+
+$(document).ready(() => loadData());
+</script>
+</body>
+</html>
