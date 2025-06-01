@@ -8,7 +8,7 @@
     {% elif endpoint == '/api/cpes' %}
       CPE 관리
     {% else %}
-      RPM 관리
+      RPM 검색
     {% endif %}
   </title>
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -22,7 +22,7 @@
     {% elif endpoint == '/api/cpes' %}
       CPE 관리
     {% else %}
-      RPM 관리
+      RPM 검색
     {% endif %}
   </h1>
 
@@ -38,11 +38,14 @@
       <tbody id="table-body"><tr><td colspan='100%'>⏳ 로딩 중...</td></tr></tbody>
     </table>
   </div>
+
+  <div id="pagination" class="d-flex justify-content-center mt-3"></div>
 </div>
 
 <script>
 let endpoint = "{{ endpoint }}";
 let query = "{{ query }}";
+let currentPage = 1;
 
 function renderTable(data) {
   const $head = $("#table-head");
@@ -69,21 +72,41 @@ function renderTable(data) {
   });
 }
 
-function loadData() {
+function renderPagination(hasNext) {
+  const $pagination = $("#pagination");
+  let buttons = "";
+  for (let i = 1; i <= currentPage + (hasNext ? 1 : 0); i++) {
+    buttons += `<button class="btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-outline-primary'} mx-1" onclick="loadData(${i})">${i}</button>`;
+  }
+  $pagination.html(buttons);
+}
+
+function loadData(page = 1) {
+  currentPage = page;
   const $head = $("#table-head");
   const $body = $("#table-body");
   $head.html("");
   $body.html("<tr><td colspan='100%'>⏳ 로딩 중...</td></tr>");
 
   const q = query.trim();
-  const url = q ? `${endpoint}?query=${encodeURIComponent(q)}` : `${endpoint}?query=`;
+  const url = endpoint;
 
-  // fetch 지연 없이 동작시키기 위해 setTimeout 사용
   setTimeout(async () => {
     try {
-      const res = await fetch(url);
+      let res;
+      if (endpoint === "/api/search") {
+        res = await fetch(`${url}?page=${page}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rpm_info: q })
+        });
+      } else {
+        res = await fetch(`${url}?query=${encodeURIComponent(q)}`);
+      }
+
       const json = await res.json();
       renderTable(json.data || []);
+      renderPagination(json.data.length === 20);
     } catch (err) {
       $head.html("");
       $body.html("<tr><td colspan='100%'>❌ 오류 발생</td></tr>");
@@ -126,7 +149,7 @@ $("#bulk-edit-btn").on("click", function() {
         if (json.status !== "success") {
           alert("수정 실패: " + (json.detail || "에러"));
         } else {
-          loadData();
+          loadData(currentPage);
         }
       });
   });

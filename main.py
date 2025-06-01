@@ -1,13 +1,19 @@
-from fastapi import FastAPI, Request, Query, Body
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 import pymysql
 import re
 from distutils.version import LooseVersion
-import datetime
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
+
+from pydantic import Field
+
+class RpmQuery(BaseModel):
+  rpm_info: str = Field(..., description="검색할 RPM 정보")
+
 
 def get_connection():
   return pymysql.connect(
@@ -24,17 +30,16 @@ async def index(request: Request):
   return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/cve", response_class=HTMLResponse)
-async def show_cve_ui(request: Request, query: str = Query("")):
+async def show_cve_ui(request: Request, query: str = ""):
   return templates.TemplateResponse("nvd_data.html", {"request": request, "endpoint": "/api/cves", "query": query})
 
 @app.get("/cpe", response_class=HTMLResponse)
-async def show_cpe_ui(request: Request, query: str = Query("")):
+async def show_cpe_ui(request: Request, query: str = ""):
   return templates.TemplateResponse("nvd_data.html", {"request": request, "endpoint": "/api/cpes", "query": query})
 
 @app.get("/rpm", response_class=HTMLResponse)
-async def show_rpm_ui(request: Request, query: str = Query("")):
-  return templates.TemplateResponse("nvd_data.html", {"request": request, "endpoint": "/api/rpms", "query": query})
-
+async def show_rpm_ui(request: Request, query: str = ""):
+  return templates.TemplateResponse("nvd_data.html", {"request": request, "endpoint": "/api/search", "query": query})
 
 def normalize_version(ver_str):
   m = re.match(r'^(\d+\.\d+\.\d+)([a-z])$', ver_str)
@@ -64,17 +69,18 @@ def is_version_matched(rpm_v, row, raw_version):
     return False
   return False
 
-def handle_rpm_lookup(query: str):
+def handle_rpm_lookup(query: str, offset: int = 0):
+  conn = get_connection()
+  cursor = conn.cursor()
+
   if not query:
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(f"""
       SELECT
         cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
         cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description
       FROM nvd_cpe AS cpe
       JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
-      ORDER BY cpe.c_id DESC LIMIT 20
+      ORDER BY cpe.c_id DESC LIMIT 20 OFFSET {offset}
     """)
     rows = cursor.fetchall()
     conn.close()
@@ -88,8 +94,6 @@ def handle_rpm_lookup(query: str):
   raw_version = match.group(2)
   rpm_v = LooseVersion(normalize_version(raw_version))
 
-  conn = get_connection()
-  cursor = conn.cursor()
   cursor.execute("""
     SELECT
       cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
@@ -119,17 +123,12 @@ def handle_rpm_lookup(query: str):
 
   return {"data": result}
 
-@app.post("/api/rpms")
-async def get_rpms(payload: dict = Body(...)):
-  query = payload.get("rpm_info", "").strip()
-  return handle_rpm_lookup(query)
-
-@app.get("/api/rpms")
-async def get_rpms_by_query(query: str = Query("")):
-  return handle_rpm_lookup(query)
+@app.post("/api/search")
+async def get_rpms(payload: RpmQuery):
+  return handle_rpm_lookup(payload.rpm_info.strip(), offset=0)
 
 @app.get("/api/cves")
-async def get_cves(query: str = Query("")):
+async def get_cves(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query.strip():
@@ -145,7 +144,7 @@ async def get_cves(query: str = Query("")):
   return {"data": rows}
 
 @app.get("/api/cpes")
-async def get_cpes(query: str = Query("")):
+async def get_cpes(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query.strip():
@@ -160,8 +159,10 @@ async def get_cpes(query: str = Query("")):
   conn.close()
   return {"data": rows}
 
+# 외부 데이터 api 연동
+
 @app.get("/api/cisa_kev")
-async def get_cisa_kev(query: str = Query("")):
+async def get_cisa_kev(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query:
@@ -173,7 +174,7 @@ async def get_cisa_kev(query: str = Query("")):
   return {"data": rows}
 
 @app.get("/api/epss")
-async def get_epss(query: str = Query("")):
+async def get_epss(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query:
@@ -185,7 +186,7 @@ async def get_epss(query: str = Query("")):
   return {"data": rows}
 
 @app.get("/api/exploitdb")
-async def get_exploitdb(query: str = Query("")):
+async def get_exploitdb(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query:
@@ -197,7 +198,7 @@ async def get_exploitdb(query: str = Query("")):
   return {"data": rows}
 
 @app.get("/api/metasploit")
-async def get_metasploit(query: str = Query("")):
+async def get_metasploit(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query:
@@ -209,7 +210,7 @@ async def get_metasploit(query: str = Query("")):
   return {"data": rows}
 
 @app.get("/api/nuclei")
-async def get_nuclei(query: str = Query("")):
+async def get_nuclei(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query:
@@ -221,7 +222,7 @@ async def get_nuclei(query: str = Query("")):
   return {"data": rows}
 
 @app.get("/api/poc_github")
-async def get_poc_github(query: str = Query("")):
+async def get_poc_github(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query:
@@ -233,7 +234,7 @@ async def get_poc_github(query: str = Query("")):
   return {"data": rows}
 
 @app.get("/api/vulncheck_kev")
-async def get_vulncheck_kev(query: str = Query("")):
+async def get_vulncheck_kev(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
   if query:
