@@ -35,37 +35,6 @@ async def show_cpe_ui(request: Request, query: str = Query("")):
 async def show_rpm_ui(request: Request, query: str = Query("")):
   return templates.TemplateResponse("nvd_data.html", {"request": request, "endpoint": "/api/rpms", "query": query})
 
-@app.get("/api/cves")
-async def get_cves(query: str = Query("")):
-  conn = get_connection()
-  cursor = conn.cursor()
-  if query.strip():
-    cursor.execute("""
-      SELECT * FROM nvd_cve 
-      WHERE cve_id = %s OR description LIKE %s
-      ORDER BY published_date DESC LIMIT 20
-    """, [query, f"%{query}%"])
-  else:
-    cursor.execute("SELECT * FROM nvd_cve ORDER BY published_date DESC LIMIT 20")
-  rows = cursor.fetchall()
-  conn.close()
-  return {"data": rows}
-
-@app.get("/api/cpes")
-async def get_cpes(query: str = Query("")):
-  conn = get_connection()
-  cursor = conn.cursor()
-  if query.strip():
-    cursor.execute("""
-      SELECT * FROM nvd_cpe 
-      WHERE cpe_uri LIKE %s OR cve_id = %s
-      ORDER BY c_id DESC LIMIT 20
-    """, [f"%{query}%", query])
-  else:
-    cursor.execute("SELECT * FROM nvd_cpe ORDER BY c_id DESC LIMIT 20")
-  rows = cursor.fetchall()
-  conn.close()
-  return {"data": rows}
 
 def normalize_version(ver_str):
   m = re.match(r'^(\d+\.\d+\.\d+)([a-z])$', ver_str)
@@ -78,10 +47,10 @@ def is_version_matched(rpm_v, row, raw_version):
   try:
     def safe(v): return LooseVersion(normalize_version(v.strip())) if v else None
     exact = row["version"]
-    vsi = row["versionStartIncluding"]
-    vse = row["versionStartExcluding"]
-    vei = row["versionEndIncluding"]
-    vee = row["versionEndExcluding"]
+    vsi = row.get("versionStartIncluding")
+    vse = row.get("versionStartExcluding")
+    vei = row.get("versionEndIncluding")
+    vee = row.get("versionEndExcluding")
     if exact and exact.strip() == raw_version:
       return True
     if (vsi or vse or vei or vee) and (
@@ -95,9 +64,7 @@ def is_version_matched(rpm_v, row, raw_version):
     return False
   return False
 
-@app.post("/api/rpms")
-async def get_rpms(payload: dict = Body(...)):
-  query = payload.get("rpm_info", "").strip()
+def handle_rpm_lookup(query: str):
   if not query:
     conn = get_connection()
     cursor = conn.cursor()
@@ -152,88 +119,127 @@ async def get_rpms(payload: dict = Body(...)):
 
   return {"data": result}
 
-@app.post("/api/update")
-async def update_row(update: dict = Body(...)):
-  table = update.get("table")
-  key = update.get("cve_id")
-  updates = update.get("updates")
-  if not (table and key and updates):
-    return JSONResponse(status_code=400, content={"status": "error", "detail": "입력값 부족"})
+@app.post("/api/rpms")
+async def get_rpms(payload: dict = Body(...)):
+  query = payload.get("rpm_info", "").strip()
+  return handle_rpm_lookup(query)
 
+@app.get("/api/rpms")
+async def get_rpms_by_query(query: str = Query("")):
+  return handle_rpm_lookup(query)
+
+@app.get("/api/cves")
+async def get_cves(query: str = Query("")):
   conn = get_connection()
   cursor = conn.cursor()
-  set_clause = ", ".join([f"{k} = %s" for k in updates.keys()])
-  sql = f"UPDATE {table} SET {set_clause} WHERE cve_id = %s"
-  params = list(updates.values()) + [key]
-  cursor.execute(sql, params)
-  conn.commit()
-  conn.close()
-  return {"status": "success"}
-
-@app.post("/api/update/modified")
-async def update_modified():
-  end_date = datetime.datetime.utcnow()
-  start_date = end_date - datetime.timedelta(days=1)
-  conn = get_connection()
-  cursor = conn.cursor()
-  sql = "SELECT * FROM nvd_cve WHERE modified_date BETWEEN %s AND %s"
-  cursor.execute(sql, [start_date, end_date])
+  if query.strip():
+    cursor.execute("""
+      SELECT * FROM nvd_cve 
+      WHERE cve_id = %s OR description LIKE %s
+      ORDER BY published_date DESC LIMIT 20
+    """, [query, f"%{query}%"])
+  else:
+    cursor.execute("SELECT * FROM nvd_cve ORDER BY published_date DESC LIMIT 20")
   rows = cursor.fetchall()
   conn.close()
   return {"data": rows}
 
-
-@app.get("/api/rpms")
-async def get_rpms_by_query(query: str = Query("")):
+@app.get("/api/cpes")
+async def get_cpes(query: str = Query("")):
   conn = get_connection()
   cursor = conn.cursor()
-
-  if not query.strip():
+  if query.strip():
     cursor.execute("""
-      SELECT
-        cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
-        cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description
-      FROM nvd_cpe AS cpe
-      JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
-      ORDER BY cpe.c_id DESC LIMIT 20
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-    return {"data": rows}
-
-  match = re.match(r'^([a-zA-Z0-9\-_]+)-([\d\.]+\w?)', query)
-  if not match:
-    return JSONResponse(status_code=400, content={"detail": "RPM 형식이 올바르지 않음"})
-
-  product = match.group(1)
-  raw_version = match.group(2)
-  rpm_v = LooseVersion(normalize_version(raw_version))
-
-  cursor.execute("""
-    SELECT
-      cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
-      cpe.versionStartIncluding, cpe.versionStartExcluding,
-      cpe.versionEndIncluding, cpe.versionEndExcluding,
-      cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description
-    FROM nvd_cpe AS cpe
-    JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
-    WHERE cpe.product = %s
-  """, [product])
+      SELECT * FROM nvd_cpe 
+      WHERE cpe_uri LIKE %s OR cve_id = %s
+      ORDER BY c_id DESC LIMIT 20
+    """, [f"%{query}%", query])
+  else:
+    cursor.execute("SELECT * FROM nvd_cpe ORDER BY c_id DESC LIMIT 20")
   rows = cursor.fetchall()
   conn.close()
+  return {"data": rows}
 
-  result = []
-  for row in rows:
-    if is_version_matched(rpm_v, row, raw_version):
-      result.append({
-        "cpe_uri": row["cpe_uri"],
-        "vendor": row["vendor"],
-        "product": row["product"],
-        "version": row["version"] or "-",
-        "cve_id": row["cve_id"],
-        "cvss_score": row["cvss_score"],
-        "risk_score": row["risk_score"],
-        "description": row["description"][:80] + "..." if row["description"] and len(row["description"]) > 80 else row["description"]
-      })
+@app.get("/api/cisa_kev")
+async def get_cisa_kev(query: str = Query("")):
+  conn = get_connection()
+  cursor = conn.cursor()
+  if query:
+    cursor.execute("SELECT * FROM cisa_kev WHERE cve_id = %s", [query])
+  else:
+    cursor.execute("SELECT * FROM cisa_kev ORDER BY id DESC LIMIT 20")
+  rows = cursor.fetchall()
+  conn.close()
+  return {"data": rows}
 
-  return {"data": result}
+@app.get("/api/epss")
+async def get_epss(query: str = Query("")):
+  conn = get_connection()
+  cursor = conn.cursor()
+  if query:
+    cursor.execute("SELECT * FROM epss_scores WHERE cve = %s", [query])
+  else:
+    cursor.execute("SELECT * FROM epss_scores ORDER BY id DESC LIMIT 20")
+  rows = cursor.fetchall()
+  conn.close()
+  return {"data": rows}
+
+@app.get("/api/exploitdb")
+async def get_exploitdb(query: str = Query("")):
+  conn = get_connection()
+  cursor = conn.cursor()
+  if query:
+    cursor.execute("SELECT * FROM exploitdb WHERE cve_code = %s", [query])
+  else:
+    cursor.execute("SELECT * FROM exploitdb ORDER BY id DESC LIMIT 20")
+  rows = cursor.fetchall()
+  conn.close()
+  return {"data": rows}
+
+@app.get("/api/metasploit")
+async def get_metasploit(query: str = Query("")):
+  conn = get_connection()
+  cursor = conn.cursor()
+  if query:
+    cursor.execute("SELECT * FROM metasploit WHERE cve_id = %s", [query])
+  else:
+    cursor.execute("SELECT * FROM metasploit ORDER BY id DESC LIMIT 20")
+  rows = cursor.fetchall()
+  conn.close()
+  return {"data": rows}
+
+@app.get("/api/nuclei")
+async def get_nuclei(query: str = Query("")):
+  conn = get_connection()
+  cursor = conn.cursor()
+  if query:
+    cursor.execute("SELECT * FROM nuclei WHERE cve_id = %s", [query])
+  else:
+    cursor.execute("SELECT * FROM nuclei ORDER BY id DESC LIMIT 20")
+  rows = cursor.fetchall()
+  conn.close()
+  return {"data": rows}
+
+@app.get("/api/poc_github")
+async def get_poc_github(query: str = Query("")):
+  conn = get_connection()
+  cursor = conn.cursor()
+  if query:
+    cursor.execute("SELECT * FROM poc_github WHERE cve_id = %s", [query])
+  else:
+    cursor.execute("SELECT * FROM poc_github ORDER BY id DESC LIMIT 20")
+  rows = cursor.fetchall()
+  conn.close()
+  return {"data": rows}
+
+@app.get("/api/vulncheck_kev")
+async def get_vulncheck_kev(query: str = Query("")):
+  conn = get_connection()
+  cursor = conn.cursor()
+  if query:
+    cursor.execute("SELECT * FROM vulncheck_kev WHERE cve = %s", [query])
+  else:
+    cursor.execute("SELECT * FROM vulncheck_kev ORDER BY id DESC LIMIT 20")
+  rows = cursor.fetchall()
+  conn.close()
+  return {"data": rows}
