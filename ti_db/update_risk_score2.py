@@ -4,7 +4,7 @@ from math import gamma
 import math
 from datetime import datetime
 
-# 📌 위험도 계산 함수 정의
+# 위험도 계산 함수 정의
 def logistic(x, alpha=1.0, mu=5.0):
   return 1 / (1 + math.exp(-alpha * (x - mu)))
 
@@ -44,7 +44,7 @@ if cursor.fetchone() is None:
   print("🛠 risk_score 컬럼 생성 중...")
   cursor.execute("ALTER TABLE nvd_cve ADD COLUMN risk_score FLOAT")
 else:
-  print("✅ risk_score 컬럼 이미 존재함")
+  print("risk_score 컬럼 이미 존재함")
 
 # 📥 위험도 미계산 대상 CVE 로딩
 print("위험도 미계산 데이터 조회 중...")
@@ -63,8 +63,8 @@ cve_df["kev_status"] = cve_df["cve_id"].isin(kev_df["cveID"]).astype(int)
 cve_df = cve_df.merge(epss_df, how="left", left_on="cve_id", right_on="cve")
 cve_df.drop(columns=["cve"], inplace=True)
 
-# 🔁 위험도 계산 및 업데이트
-print("🔄 risk_score 계산 중...")
+# 위험도 계산 및 업데이트
+print("risk_score 계산 중...")
 for _, row in cve_df.iterrows():
   if not row["cve_id"]:
     continue
@@ -80,7 +80,7 @@ for _, row in cve_df.iterrows():
     (score, cve_id)
   )
 
-# ✅ 최종 반영된 published_date 확인 (날짜만 출력)
+# 최종 반영된 published_date 확인 (날짜만 출력)
 cursor.execute("SELECT MAX(published_date) FROM nvd_cve WHERE risk_score IS NOT NULL")
 latest_date = cursor.fetchone()[0]
 
@@ -88,5 +88,5 @@ cursor.close()
 conn.close()
 
 if latest_date:
-  print(f"📆 최종 반영된 published_date: {latest_date.strftime('%Y-%m-%d')}")
-print("🟢 risk_score 업데이트 완료")
+  print(f"최종 반영된 published_date: {latest_date.strftime('%Y-%m-%d')}")
+print("risk_score 업데이트 완료")

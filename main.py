@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -244,3 +244,27 @@ async def get_vulncheck_kev(query: str = ""):
   rows = cursor.fetchall()
   conn.close()
   return {"data": rows}
+
+@app.post("/api/update")
+async def update_nvd_data(
+  start_date: str = Query(...),
+  end_date: str = Query(...),
+  mode: str = Query("published", pattern="^(published|modified)$")
+):
+  try:
+    start = parse_iso8601(start_date).isoformat() + ".000Z"
+    end = parse_iso8601(end_date).isoformat() + ".000Z"
+  except ValueError as ve:
+    return JSONResponse(status_code=400, content={"detail": str(ve)})
+
+  items = fetch_cves(start, end, mode)
+  insert_count, update_count = save_to_db(items)
+
+  return {
+    "detail": f"✅ {mode} 기준 업데이트 완료",
+    "start_date": start_date,
+    "end_date": end_date,
+    "total_count": len(items),
+    "newly_inserted": insert_count,
+    "existing_updated": update_count
+  }
