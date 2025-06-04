@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import pymysql
 import re
 from distutils.version import LooseVersion
+from database import get_connection
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -15,15 +16,9 @@ class RpmQuery(BaseModel):
   rpm_info: str = Field(..., description="검색할 RPM 정보")
 
 
-def get_connection():
-  return pymysql.connect(
-    host="172.16.250.227",
-    user="root",
-    password="qhdks00@@",
-    database="vtm",
-    charset="utf8mb4",
-    cursorclass=pymysql.cursors.DictCursor
-  )
+def get_connection(connect=pymysql.connect(host="172.16.250.227", user="root", password="qhdks00@@", database="vtm",
+                                           charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)):
+  return connect
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -83,16 +78,20 @@ def handle_rpm_lookup(query: str, offset: int = 0):
       ORDER BY cpe.c_id DESC LIMIT 20 OFFSET {offset}
     """)
     rows = cursor.fetchall()
-    conn.close()
+    #cursor.close()
+    #conn.close()
     return {"data": rows}
 
   match = re.match(r'^([a-zA-Z0-9\-_]+)-([\d\.]+\w?)', query)
   if not match:
-    return JSONResponse(status_code=400, content={"detail": "RPM 형식이 올바르지 않음"})
+      return JSONResponse(status_code=400, content={"data": {"status":"ERROR","detail":"RPM 형식이 올바르지 않음"}})
 
   product = match.group(1)
   raw_version = match.group(2)
   rpm_v = LooseVersion(normalize_version(raw_version))
+
+  #conn = get_connection()
+  #cursor = conn.cursor()
 
   cursor.execute("""
     SELECT
@@ -103,9 +102,9 @@ def handle_rpm_lookup(query: str, offset: int = 0):
     FROM nvd_cpe AS cpe
     JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
     WHERE cpe.product = %s
+    order by cve.risk_score desc
   """, [product])
   rows = cursor.fetchall()
-  conn.close()
 
   result = []
   for row in rows:
@@ -121,7 +120,13 @@ def handle_rpm_lookup(query: str, offset: int = 0):
         "description": row["description"][:80] + "..." if row["description"] and len(row["description"]) > 80 else row["description"]
       })
 
-  return {"data": result}
+  #cursor.close()
+  #conn.close()
+
+  if result:
+      return {"data": result[0]}
+  else:
+      return {"data":[]}
 
 @app.post("/api/search")
 async def get_rpms(payload: RpmQuery):
