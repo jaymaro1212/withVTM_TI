@@ -78,21 +78,42 @@ def handle_rpm_lookup(query: str, offset: int = 0):
       ORDER BY cpe.c_id DESC LIMIT 20 OFFSET {offset}
     """)
     rows = cursor.fetchall()
-    #cursor.close()
-    #conn.close()
     return {"data": rows}
 
-  match = re.match(r'^([a-zA-Z0-9\-_]+)-([\d\.]+\w?)', query)
-  if not match:
-      return JSONResponse(status_code=400, content={"data": {"status":"ERROR","detail":"RPM 형식이 올바르지 않음"}})
+  # 1) .rpm 확장자 제거
+  q = query
+  if q.lower().endswith('.rpm'):
+    q = q[:-4]
 
-  product = match.group(1)
-  raw_version = match.group(2)
-  rpm_v = LooseVersion(normalize_version(raw_version))
+  # 2) 마지막 마침표(.) 뒤의 아키텍처(x86_64 등) 제거
+  parts = q.rsplit('.', 1)
+  if len(parts) == 2:
+    base = parts[0]  # e.g. "openssl-1.1.1g-15.el8"
+  else:
+    base = q
 
-  #conn = get_connection()
-  #cursor = conn.cursor()
+  # 3) product와 version-release 분리: 첫 번째 '-' 기준으로 분리 (split('-', 1) 사용)
+  if '-' not in base:
+    return JSONResponse(
+      status_code=400,
+      content={"data": {"status": "ERROR", "detail": "RPM 형식이 올바르지 않음"}}
+    )
+  product, version_release = base.split('-', 1)
+  # e.g. product="openssl", version_release="1.1.1g-15.el8"
 
+  # 4) version-release에서 순수 버전(예: "1.1.1g")만 꺼내기
+  raw_version = version_release.split('-', 1)[0]
+  # e.g. raw_version="1.1.1g"
+
+  try:
+    rpm_v = LooseVersion(normalize_version(raw_version))
+  except:
+    return JSONResponse(
+      status_code=400,
+      content={"data": {"status": "ERROR", "detail": "버전 파싱 실패"}}
+    )
+
+  # 5) DB에서 product 기준으로 CPE/CVE 조회
   cursor.execute("""
     SELECT
       cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
@@ -102,7 +123,7 @@ def handle_rpm_lookup(query: str, offset: int = 0):
     FROM nvd_cpe AS cpe
     JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
     WHERE cpe.product = %s
-    order by cve.risk_score desc
+    ORDER BY cve.risk_score DESC
   """, [product])
   rows = cursor.fetchall()
 
@@ -117,16 +138,19 @@ def handle_rpm_lookup(query: str, offset: int = 0):
         "cve_id": row["cve_id"],
         "cvss_score": row["cvss_score"],
         "risk_score": row["risk_score"],
-        "description": row["description"][:80] + "..." if row["description"] and len(row["description"]) > 80 else row["description"]
+        "description": (
+          row["description"][:80] + "..."
+          if row["description"] and len(row["description"]) > 80
+          else row["description"]
+        )
       })
 
-  #cursor.close()
-  #conn.close()
-
   if result:
-      return {"data": result[0]}
+    return {"data": result[0]}
   else:
-      return {"data":[]}
+    return {"data": []}
+
+
 
 @app.post("/api/search")
 async def get_rpms(payload: RpmQuery):
