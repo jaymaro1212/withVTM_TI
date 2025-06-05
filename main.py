@@ -6,6 +6,7 @@ import pymysql
 import re
 from distutils.version import LooseVersion
 from database import get_connection
+import json
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -66,13 +67,13 @@ def is_version_matched(rpm_v, row, raw_version):
 
 def handle_rpm_lookup(query: str, offset: int = 0):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
 
   if not query:
     cursor.execute(f"""
-      SELECT
-        cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
-        cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description
+    SELECT
+    cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
+    cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description, cve.weaknesses
       FROM nvd_cpe AS cpe
       JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
       ORDER BY cpe.c_id DESC LIMIT 20 OFFSET {offset}
@@ -119,7 +120,7 @@ def handle_rpm_lookup(query: str, offset: int = 0):
       cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
       cpe.versionStartIncluding, cpe.versionStartExcluding,
       cpe.versionEndIncluding, cpe.versionEndExcluding,
-      cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description
+      cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description, cve.weaknesses
     FROM nvd_cpe AS cpe
     JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
     WHERE cpe.product = %s
@@ -130,26 +131,104 @@ def handle_rpm_lookup(query: str, offset: int = 0):
   result = []
   for row in rows:
     if is_version_matched(rpm_v, row, raw_version):
+
+      # CISA 조회
+      known_ransomware = ""
+      due_date = ""
+
+      cursor.execute("""
+                     SELECT knownRansomwareCampaignUse, dueDate
+                     FROM cisa_kev
+                     WHERE cveID = %s
+                     """, [row["cve_id"]])
+
+      cisa_row = cursor.fetchone()
+
+      if cisa_row:
+        if cisa_row["knownRansomwareCampaignUse"]:
+          known_ransomware = cisa_row["knownRansomwareCampaignUse"]
+        if cisa_row["dueDate"]:
+          due_date = str(cisa_row["dueDate"])
+
+      # EPSS 점수 조회
+      cve_id = row["cve_id"].strip()
+      cursor.execute("SELECT epss FROM epss_scores WHERE cve = %s", [cve_id])
+      epss_row = cursor.fetchone()
+      epss_score = float(epss_row["epss"]) if epss_row and "epss" in epss_row else None  # 또는 0.0
+
+      # PoC 링크 조회
+      cursor.execute("SELECT poc_link FROM poc_github WHERE cve_id = %s", [row["cve_id"]])
+      poc_links = [p["poc_link"] for p in cursor.fetchall() if p.get("poc_link")]
+
+      # ExploitDB 파일 조회
+      cursor.execute("SELECT file FROM exploitdb WHERE cve_code = %s", [row["cve_id"]])
+      exploit_files = [e["file"] for e in cursor.fetchall() if e.get("file")]
+
+      # Metasploit reference 조회
+      cursor.execute("SELECT reference FROM metasploit WHERE cve_id = %s", [row["cve_id"]])
+      msf_rows = cursor.fetchall()
+      msf_references = [m["reference"] for m in msf_rows if m.get("reference")]
+
+      # Nuclei 조회
+      cursor.execute("SELECT impact, remediation FROM nuclei WHERE cve_id = %s", [row["cve_id"]])
+      nuclei_row = cursor.fetchone()
+      impact = nuclei_row["impact"] if nuclei_row and "impact" in nuclei_row else ""
+      remediation = nuclei_row["remediation"] if nuclei_row and "remediation" in nuclei_row else ""
+
+      # 버전 범위 가공
+      version_range = "-"
+      if row.get("versionStartIncluding") or row.get("versionStartExcluding") or row.get(
+              "versionEndIncluding") or row.get("versionEndExcluding"):
+        parts = []
+        if row.get("versionStartIncluding"):
+          parts.append(f"{row['versionStartIncluding']} 이상")
+        elif row.get("versionStartExcluding"):
+          parts.append(f"{row['versionStartExcluding']} 초과")
+        if row.get("versionEndIncluding"):
+          parts.append(f"{row['versionEndIncluding']} 이하")
+        elif row.get("versionEndExcluding"):
+          parts.append(f"{row['versionEndExcluding']} 미만")
+        version_range = " ~ ".join(parts)
+      elif row.get("version"):
+        version_range = row["version"]
+
       result.append({
         "cpe_uri": row["cpe_uri"],
         "vendor": row["vendor"],
         "product": row["product"],
-        "version": row["version"] or "-",
+        #"version": row["version"] or "-",
+        "version": version_range,
         "cve_id": row["cve_id"],
         "cvss_score": row["cvss_score"],
+        "epss_score": epss_score,
         "risk_score": row["risk_score"],
-        "description": (
-          row["description"][:80] + "..."
-          if row["description"] and len(row["description"]) > 80
-          else row["description"]
-        )
+        "description": row["description"].replace("\n", " ") if row["description"] else "",
+        "weaknesses": row["weaknesses"],
+        "impact": impact,
+        "remediation": remediation,
+        "poc_links": poc_links,
+        "exploitdb_files": exploit_files,
+        "cisa_knownRansomware": known_ransomware,
+        "cve_dueDate": due_date,
+        "references": msf_references
       })
 
+  # if result:
+  #   return {"data": result}
+  # else:
+  #   return {"data": []}
+  #
   if result:
-    return {"data": result[0]}
+    top = sorted(result, key=lambda x: x["risk_score"] if x["risk_score"] is not None else 0, reverse=True)[0]
+    return JSONResponse(
+      content=json.loads(json.dumps({"data": [top]}, ensure_ascii=False)),
+      media_type="application/json"
+    )
   else:
-    return {"data": []}
-
+    return JSONResponse(
+      content={"data": []},
+      media_type="application/json"
+    )
 
 
 @app.post("/api/search")
@@ -160,6 +239,7 @@ async def get_rpms(payload: RpmQuery):
 async def get_cves(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor()
+
   if query.strip():
     cursor.execute("""
       SELECT * FROM nvd_cve 
