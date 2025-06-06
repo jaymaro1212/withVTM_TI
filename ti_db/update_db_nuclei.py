@@ -1,121 +1,176 @@
 import os
-import requests
-import yaml
+import json
 import pymysql
+import yaml
+import re
+from git import Repo
 from datetime import datetime
 
-NUCLEI_REPO_URL = "https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/cves/"
-
-DB_CONFIG = {
-  "host": "172.16.250.227",
-  "user": "root",
-  "password": "qhdks00@@",
-  "database": "vtm",
-  "charset": "utf8mb4",
-  "cursorclass": pymysql.cursors.DictCursor
-}
-
 def get_connection():
-  return pymysql.connect(**DB_CONFIG)
+  return pymysql.connect(
+    host="172.16.250.227",
+    user="root",
+    password="qhdks00@@",
+    database="vtm",
+    charset="utf8mb4",
+    autocommit=True,
+    cursorclass=pymysql.cursors.DictCursor
+  )
 
-def fetch_yaml_list():
-  index_url = "https://api.github.com/repos/projectdiscovery/nuclei-templates/contents/cves"
-  res = requests.get(index_url)
-  if res.status_code == 200:
-    return [f["name"] for f in res.json() if f["name"].endswith(".yaml")]
-  else:
-    print("YAML 리스트 가져오기 실패")
-    return []
+def create_table(cursor):
+  cursor.execute("""
+  CREATE TABLE IF NOT EXISTS nuclei (
+    cve_id VARCHAR(50) PRIMARY KEY,
+    name TEXT,
+    description TEXT,
+    severity VARCHAR(20),
+    remediation TEXT,
+    reference TEXT,
+    vendor VARCHAR(255),
+    product VARCHAR(255),
+    impact TEXT,
+    raw MEDIUMTEXT,
+    matchers JSON,
+    fixed_version VARCHAR(50),
+    last_commit_date DATE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  """)
 
-def parse_yaml(url):
-  res = requests.get(url)
-  if res.status_code != 200:
+def extract_fixed_version(text):
+  if not text:
     return None
-  try:
-    return yaml.safe_load(res.text)
-  except:
-    return None
+  match = re.search(r'version\s+(\d+(?:\.\d+)+)', text, re.IGNORECASE)
+  if match:
+    return match.group(1)
+  match = re.search(r'\b(\d+(?:\.\d+){1,3})\b', text)
+  if match:
+    return match.group(1)
+  return None
 
-def save_or_update(conn, cve_id, data):
-  with conn.cursor() as cur:
-    cur.execute("""
-      INSERT INTO nuclei (
-        cve_id, name, description, severity, reference,
-        cvss2_score, cvss2_vector, cvss2_severity,
-        cvss3_score, cvss3_vector, cvss3_severity,
-        cvss4_score, cvss4_vector, cvss4_severity,
-        cwe_id, epss_score, impact, remediation,
-        vendor, product, modified_date
-      ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-      ON DUPLICATE KEY UPDATE
-        name=VALUES(name), description=VALUES(description), severity=VALUES(severity),
-        reference=VALUES(reference), cvss2_score=VALUES(cvss2_score), cvss2_vector=VALUES(cvss2_vector),
-        cvss2_severity=VALUES(cvss2_severity), cvss3_score=VALUES(cvss3_score), cvss3_vector=VALUES(cvss3_vector),
-        cvss3_severity=VALUES(cvss3_severity), cvss4_score=VALUES(cvss4_score), cvss4_vector=VALUES(cvss4_vector),
-        cvss4_severity=VALUES(cvss4_severity), cwe_id=VALUES(cwe_id), epss_score=VALUES(epss_score),
-        impact=VALUES(impact), remediation=VALUES(remediation),
-        vendor=VALUES(vendor), product=VALUES(product), modified_date=VALUES(modified_date)
-    """, (
-      cve_id,
-      data.get("name"), data.get("description"), data.get("severity"), ', '.join(data.get("reference", [])),
-      data.get("cvss2_score"), data.get("cvss2_vector"), data.get("cvss2_severity"),
-      data.get("cvss3_score"), data.get("cvss3_vector"), data.get("cvss3_severity"),
-      data.get("cvss4_score"), data.get("cvss4_vector"), data.get("cvss4_severity"),
-      data.get("cwe_id"), data.get("epss_score"),
-      data.get("impact"), data.get("remediation"),
-      data.get("vendor"), data.get("product"),
-      datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ))
+REPO_URL = "https://github.com/projectdiscovery/nuclei-templates.git"
+LOCAL_REPO_PATH = "nuclei-templates"
 
-def main():
-  yaml_files = fetch_yaml_list()
-  print(f"🔍 총 YAML 템플릿 수: {len(yaml_files)}")
+if not os.path.exists(LOCAL_REPO_PATH):
+  Repo.clone_from(REPO_URL, LOCAL_REPO_PATH)
+repo = Repo(LOCAL_REPO_PATH)
 
+def update_nuclei_templates():
   conn = get_connection()
+  cursor = conn.cursor()
+  create_table(cursor)
+
   insert_count = 0
   update_count = 0
+  today = datetime.now().strftime("%Y-%m-%d")
 
-  for filename in yaml_files:
-    cve_id = filename.replace(".yaml", "").upper()
-    url = NUCLEI_REPO_URL + filename
-    parsed = parse_yaml(url)
-    if not parsed:
+  for year in range(2000, 2026):
+    year_dir = os.path.join(LOCAL_REPO_PATH, "http", "cves", str(year))
+    if not os.path.exists(year_dir):
       continue
 
-    data = {
-      "name": parsed.get("info", {}).get("name"),
-      "description": parsed.get("info", {}).get("description"),
-      "severity": parsed.get("info", {}).get("severity"),
-      "reference": parsed.get("info", {}).get("reference", []),
-      "cvss2_score": None,
-      "cvss2_vector": None,
-      "cvss2_severity": None,
-      "cvss3_score": None,
-      "cvss3_vector": None,
-      "cvss3_severity": None,
-      "cvss4_score": None,
-      "cvss4_vector": None,
-      "cvss4_severity": None,
-      "cwe_id": None,
-      "epss_score": None,
-      "impact": None,
-      "remediation": None,
-      "vendor": None,
-      "product": None
-    }
+    for root, _, files in os.walk(year_dir):
+      for file in files:
+        if not file.endswith(".yaml"):
+          continue
 
-    try:
-      save_or_update(conn, cve_id, data)
-      insert_count += 1
-    except Exception as e:
-      print(f"{cve_id} 저장 실패: {e}")
+        file_path = os.path.join(root, file)
+        rel_path = os.path.relpath(file_path, LOCAL_REPO_PATH)
+
+        try:
+          commits = list(repo.iter_commits(paths=rel_path, max_count=1))
+          last_commit_date = datetime.fromtimestamp(commits[0].committed_date).strftime('%Y-%m-%d') if commits else None
+        except:
+          last_commit_date = None
+
+        try:
+          with open(file_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        except:
+          continue
+
+        if not data or "info" not in data:
+          continue
+
+        info = data["info"]
+        http = data.get("http", [{}])[0]
+
+        cve_id = data.get("id") or info.get("cve-id")
+        if not cve_id:
+          continue
+
+        name = info.get("name")
+        description = info.get("description")
+        severity = info.get("severity")
+        remediation = info.get("remediation")
+        reference = ', '.join(info.get("reference", [])) if isinstance(info.get("reference"), list) else info.get("reference")
+        vendor = info.get("metadata", {}).get("vendor")
+        product = info.get("metadata", {}).get("product")
+        impact = info.get("impact")
+        raw = "\n\n".join(http.get("raw", [])) if http.get("raw") else None
+        matchers = json.dumps(http.get("matchers"), ensure_ascii=False) if http.get("matchers") else None
+        fixed_version = extract_fixed_version(remediation)
+
+        cursor.execute("SELECT cve_id, last_commit_date FROM nuclei WHERE cve_id = %s", (cve_id,))
+        row = cursor.fetchone()
+
+        if row:
+          if row["last_commit_date"] != last_commit_date:
+            cursor.execute("""
+              UPDATE nuclei SET
+                name=%s,
+                description=%s,
+                severity=%s,
+                remediation=%s,
+                reference=%s,
+                vendor=%s,
+                product=%s,
+                impact=%s,
+                raw=%s,
+                matchers=%s,
+                fixed_version=%s,
+                last_commit_date=%s
+              WHERE cve_id=%s
+            """, (
+              name,
+              description,
+              severity,
+              remediation,
+              reference,
+              vendor,
+              product,
+              impact,
+              raw,
+              matchers,
+              fixed_version,
+              last_commit_date,
+              cve_id
+            ))
+            update_count += 1
+        else:
+          cursor.execute("""
+            INSERT INTO nuclei (
+              cve_id, name, description,
+              severity, remediation, reference,
+              vendor, product, impact,
+              raw, matchers, fixed_version,
+              last_commit_date
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+          """, (
+            cve_id, name, description,
+            severity, remediation, reference,
+            vendor, product, impact,
+            raw, matchers, fixed_version,
+            last_commit_date
+          ))
+          insert_count += 1
 
   conn.commit()
   conn.close()
 
-  print("nuclei 테이블 업데이트 완료")
-  print(f"├─ 저장/업데이트: {insert_count}건")
-  print("└─ 작업 종료")
+  print("✅ nuclei 템플릿 DB 업데이트 완료")
+  print(f"├─ 신규 추가: {insert_count}건")
+  print(f"├─ 내용 갱신: {update_count}건")
+  print(f"└─ 실행 일자: {today}")
 
 if __name__ == "__main__":
-  main()
+  update_nuclei_templates()

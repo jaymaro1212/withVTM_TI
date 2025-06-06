@@ -170,10 +170,11 @@ def handle_rpm_lookup(query: str, offset: int = 0):
       msf_references = [m["reference"] for m in msf_rows if m.get("reference")]
 
       # Nuclei 조회
-      cursor.execute("SELECT impact, remediation FROM nuclei WHERE cve_id = %s", [row["cve_id"]])
+      cursor.execute("""SELECT impact, remediation, fixed_version FROM nuclei WHERE cve_id = %s""", [row["cve_id"]])
       nuclei_row = cursor.fetchone()
       impact = nuclei_row["impact"] if nuclei_row and "impact" in nuclei_row else ""
       remediation = nuclei_row["remediation"] if nuclei_row and "remediation" in nuclei_row else ""
+      fixed_version = nuclei_row["fixed_version"] if nuclei_row and "fixed_version" in nuclei_row else ""
 
       # 버전 범위 가공
       version_range = "-"
@@ -204,6 +205,7 @@ def handle_rpm_lookup(query: str, offset: int = 0):
         "risk_score": row["risk_score"],
         "description": row["description"].replace("\n", " ") if row["description"] else "",
         "weaknesses": row["weaknesses"],
+        "fixed_version": fixed_version,
         "impact": impact,
         "remediation": remediation,
         "poc_links": poc_links,
@@ -370,7 +372,7 @@ async def update_nvd_data(
   insert_count, update_count = save_to_db(items)
 
   return {
-    "detail": f"✅ {mode} 기준 업데이트 완료",
+    "detail": f" {mode} 기준 업데이트 완료",
     "start_date": start_date,
     "end_date": end_date,
     "total_count": len(items),
