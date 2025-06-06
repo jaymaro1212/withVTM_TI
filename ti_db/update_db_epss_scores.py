@@ -68,5 +68,5 @@ def update_epss_scores_by_date(date_str):
   print(f"└─ 마지막 업데이트 날짜: {now}")
 
 if __name__ == "__main__":
-  input_date = input("🔎 업데이트할 날짜 입력 (예: 2025-06-01): ").strip()
-  update_epss_scores_by_date(input_date)
+  today = datetime.today().strftime("%Y-%m-%d")
+  update_epss_scores_by_date(today)
