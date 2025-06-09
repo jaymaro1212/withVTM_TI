@@ -168,8 +168,8 @@ def update_nuclei_templates():
   conn.close()
 
   print("✅ nuclei 템플릿 DB 업데이트 완료")
-  print(f"├─ 신규 추가: {insert_count}건")
-  print(f"├─ 내용 갱신: {update_count}건")
+  print(f"├─ 신규 항목 추가: {insert_count}건")
+  print(f"├─ 기존 항목 업데이트: {update_count}건")
   print(f"└─ 실행 일자: {today}")
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import pymysql
 import requests
 import re
+from datetime import datetime
 
 def get_connection():
   return pymysql.connect(
@@ -99,8 +100,11 @@ def fetch_and_insert():
   conn.commit()
   conn.close()
 
+  now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
   print("✅ PoC-in-GitHub 업데이트 완료")
-  print(f"├─ 업데이트: {update_count}건")
-  print(f"└─ 신규 추가: {insert_count}건")
+  print(f"├─ 신규 항목 추가: {insert_count}건")
+  print(f"├─ 기존 항목 업데이트: {update_count}건")
+  print(f"└─ 마지막 업데이트 날짜: {now}")
 
 fetch_and_insert()

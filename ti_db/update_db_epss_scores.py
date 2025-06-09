@@ -90,7 +90,7 @@ def update_epss_scores_current():
 
   print("\n✅ EPSS 업데이트 완료")
   print(f"├─ 신규 CVE 추가: {insert_count}건")
-  print(f"├─ 기존 CVE 갱신: {update_count}건")
+  print(f"├─ 기존 CVE 업데이트: {update_count}건")
   print(f"├─ 최신 CSV에 없는 CVE 삭제: {delete_count}건")
   print(f"└─ 작업 종료 시각: {now}")
 

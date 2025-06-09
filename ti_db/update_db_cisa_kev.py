@@ -73,8 +73,8 @@ def update_cisa_kev():
   conn.close()
 
   print("✅ CISA KEV 업데이트 완료")
-  print(f"├─ 기존 CVE 업데이트: {update_count}건")
   print(f"├─ 신규 CVE 추가: {insert_count}건")
+  print(f"├─ 기존 CVE 업데이트: {update_count}건")
   print(f"└─ 마지막 업데이트 날짜: {now}")
 
 if __name__ == "__main__":

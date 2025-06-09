@@ -126,8 +126,8 @@ def update_metasploit():
   conn.close()
 
   print("✅ Metasploit 업데이트 완료")
-  print(f"├─ 기존 항목 업데이트: {update_count}건")
   print(f"├─ 신규 항목 추가: {insert_count}건")
+  print(f"├─ 기존 항목 업데이트: {update_count}건")
   print(f"└─ 마지막 업데이트 날짜: {now}")
 
 if __name__ == "__main__":
