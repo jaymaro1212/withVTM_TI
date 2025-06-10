@@ -20,5 +20,5 @@ def get_connection():
         conn = db.connection().connection
         return conn
     except Exception as e:
-        print(f"❌ DB 연결 오류: {e}")
+        print(f"DB 연결 오류: {e}")
         raise RuntimeError("DB 연결 실패")

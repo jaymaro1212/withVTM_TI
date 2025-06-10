@@ -91,10 +91,17 @@ function loadData(page = 1) {
   const q = query.trim();
   const url = endpoint;
 
+  // ✅ RPM 검색 전용 조건: 검색어 없으면 호출 막고 안내
+  if (endpoint === "/api/search_single" && !q) {
+    $head.html("");
+    $body.html("<tr><td colspan='100%'>🔎 검색어를 입력해주세요</td></tr>");
+    return;
+  }
+
   setTimeout(async () => {
     try {
       let res;
-      if (endpoint === "/api/search") {
+      if (endpoint === "/api/search_single") {
         res = await fetch(`${url}?page=${page}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -105,8 +112,9 @@ function loadData(page = 1) {
       }
 
       const json = await res.json();
+      console.log("응답 내용:", json);
       renderTable(json.data || []);
-      renderPagination(json.data.length === 20);
+      renderPagination((json.data || []).length >= 1);
     } catch (err) {
       $head.html("");
       $body.html("<tr><td colspan='100%'>❌ 오류 발생</td></tr>");

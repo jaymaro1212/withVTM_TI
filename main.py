@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import List
 import pymysql
 import re
 from distutils.version import LooseVersion
@@ -11,15 +12,11 @@ import json
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-from pydantic import Field
-
 class RpmQuery(BaseModel):
   rpm_info: str = Field(..., description="검색할 RPM 정보")
 
-
-def get_connection(connect=pymysql.connect(host="172.16.250.227", user="root", password="qhdks00@@", database="vtm",
-                                           charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)):
-  return connect
+class BulkRpmQuery(BaseModel):
+  rpm_info: List[str] = Field(..., description="검색할 RPM 정보 리스트")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
@@ -35,7 +32,11 @@ async def show_cpe_ui(request: Request, query: str = ""):
 
 @app.get("/rpm", response_class=HTMLResponse)
 async def show_rpm_ui(request: Request, query: str = ""):
-  return templates.TemplateResponse("nvd_data.html", {"request": request, "endpoint": "/api/search", "query": query})
+  return templates.TemplateResponse("nvd_data.html", {
+    "request": request,
+    "endpoint": "/api/search_single",
+    "query": query
+  })
 
 def normalize_version(ver_str):
   m = re.match(r'^(\d+\.\d+\.\d+)([a-z])$', ver_str)
@@ -64,39 +65,24 @@ def is_version_matched(rpm_v, row, raw_version):
   except:
     return False
   return False
-#
+
 def handle_rpm_lookup(query: str, offset: int = 0):
   conn = get_connection()
   cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-  if not query:
-    cursor.execute(f"""
-    SELECT
-    cpe.cpe_uri, cpe.vendor, cpe.product, cpe.version,
-    cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description, cve.weaknesses
-      FROM nvd_cpe AS cpe
-      JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
-      ORDER BY cpe.c_id DESC LIMIT 20 OFFSET {offset}
-    """)
-    rows = cursor.fetchall()
-    return {"data": rows}
-
   if query.lower().endswith('.rpm'):
     query = query[:-4]
-
   parts = query.rsplit('.', 1)
   base = parts[0] if len(parts) == 2 else query
-
   if '-' not in base:
-    return JSONResponse(status_code=400, content={"data": {"status": "ERROR", "detail": "RPM 형식이 올바르지 않음"}})
-
-  product, version_release = base.split('-', 1)
-  raw_version = version_release.split('-', 1)[0]
+    return JSONResponse(content={"data": []})
 
   try:
+    product, version_release = base.split('-', 1)
+    raw_version = version_release.split('-', 1)[0]
     rpm_v = LooseVersion(normalize_version(raw_version))
   except:
-    return JSONResponse(status_code=400, content={"data": {"status": "ERROR", "detail": "버전 파싱 실패"}})
+    return JSONResponse(content={"data": []})
 
   cursor.execute("""
     SELECT
@@ -115,9 +101,7 @@ def handle_rpm_lookup(query: str, offset: int = 0):
   for row in rows:
     if is_version_matched(rpm_v, row, raw_version):
       cve_id = row["cve_id"].strip() if "cve_id" in row and row["cve_id"] else ""
-      description = row["description"] if "description" in row and row["description"] else ""
-      if isinstance(description, str):
-        description = description.replace("\n", " ")
+      description = row["description"].replace("\n", " ") if row.get("description") else ""
 
       # CISA
       known_ransomware = ""
@@ -133,9 +117,9 @@ def handle_rpm_lookup(query: str, offset: int = 0):
       cursor.execute("SELECT epss FROM epss_scores WHERE cve = %s", [cve_id])
       epss_row = cursor.fetchone()
       try:
-        if epss_row and "epss" in epss_row and epss_row["epss"] not in (None, ""):
+        if epss_row and epss_row.get("epss") not in (None, ""):
           epss_score = float(epss_row["epss"])
-      except ValueError:
+      except:
         epss_score = None
 
       # PoC
@@ -159,8 +143,7 @@ def handle_rpm_lookup(query: str, offset: int = 0):
         remediation = nuclei_row.get("remediation", "") or ""
         fixed_version = nuclei_row.get("fixed_version", "") or ""
 
-      # 버전 범위
-      version_range = "-"
+      version_range = row["version"] or "-"
       if row.get("versionStartIncluding") or row.get("versionStartExcluding") or row.get("versionEndIncluding") or row.get("versionEndExcluding"):
         parts = []
         if row.get("versionStartIncluding"):
@@ -172,8 +155,6 @@ def handle_rpm_lookup(query: str, offset: int = 0):
         elif row.get("versionEndExcluding"):
           parts.append(f"{row['versionEndExcluding']} 미만")
         version_range = " ~ ".join(parts)
-      elif row.get("version"):
-        version_range = row["version"]
 
       result.append({
         "cpe_uri": row["cpe_uri"],
@@ -196,17 +177,27 @@ def handle_rpm_lookup(query: str, offset: int = 0):
         "references": msf_references
       })
 
-  if result:
-    top = sorted(result, key=lambda x: x["risk_score"] if x["risk_score"] is not None else 0, reverse=True)[0]
-    return JSONResponse(content=json.loads(json.dumps({"data": [top]}, ensure_ascii=False)), media_type="application/json")
-  else:
-    return JSONResponse(content={"data": []}, media_type="application/json")
+  top5 = sorted(result, key=lambda x: float(x["risk_score"]) if x["risk_score"] is not None else 0, reverse=True)[:5]
+  return JSONResponse(content=json.loads(json.dumps({"data": top5}, ensure_ascii=False)), media_type="application/json")
 
-#
+@app.post("/api/search_single")
+async def get_single_rpm(payload: RpmQuery):
+  return handle_rpm_lookup(payload.rpm_info.strip())
 
 @app.post("/api/search")
-async def get_rpms(payload: RpmQuery):
-  return handle_rpm_lookup(payload.rpm_info.strip(), offset=0)
+async def bulk_rpm_search(payload: BulkRpmQuery):
+  results = []
+  for rpm in payload.rpm_info:
+    try:
+      response = handle_rpm_lookup(rpm.strip())
+      if isinstance(response, JSONResponse):
+        data = json.loads(response.body.decode("utf-8")).get("data", [])
+        results.append({"rpm_info": rpm, "data": data})
+      else:
+        results.append({"rpm_info": rpm, "data": []})
+    except Exception:
+      results.append({"rpm_info": rpm, "data": []})
+  return JSONResponse(content=json.loads(json.dumps(results, ensure_ascii=False)), media_type="application/json")
 
 @app.get("/api/cves")
 async def get_cves(query: str = ""):
