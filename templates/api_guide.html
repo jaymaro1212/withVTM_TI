@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>withTI API 가이드</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { display: flex; }
+    .sidebar {
+      width: 250px;
+      height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+      background-color: #f8f9fa;
+      border-right: 1px solid #dee2e6;
+      padding-top: 2rem;
+      overflow-y: auto;
+    }
+    .content {
+      margin-left: 260px;
+      padding: 2rem;
+      width: 100%;
+    }
+    .section-title {
+      margin-top: 3rem;
+      margin-bottom: 1rem;
+    }
+    pre code {
+      background-color: #f8f9fa;
+      padding: 1rem;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h5 class="text-center">API 목록</h5>
+    <div class="list-group list-group-flush">
+      <a href="#cves" class="list-group-item">/api/cves</a>
+      <a href="#cpes" class="list-group-item">/api/cpes</a>
+      <a href="#search" class="list-group-item">/api/search</a>
+      <a href="#search_single" class="list-group-item">/api/search_single</a>
+      <a href="#cisa_kev" class="list-group-item">/api/cisa_kev</a>
+      <a href="#epss" class="list-group-item">/api/epss</a>
+      <a href="#exploitdb" class="list-group-item">/api/exploitdb</a>
+      <a href="#metasploit" class="list-group-item">/api/metasploit</a>
+      <a href="#poc_github" class="list-group-item">/api/poc_github</a>
+      <a href="#nuclei" class="list-group-item">/api/nuclei</a>
+    </div>
+  </div>
+
+  <div class="content">
+    <h2>withTI API 가이드</h2>
+
+    <div id="cves" class="api-section">
+      <h4 class="section-title">/api/cves</h4>
+      <p><strong>설명:</strong> NVD CVE 정보를 검색합니다.</p>
+      <p><strong>Method:</strong> GET</p>
+      <p><strong>Query:</strong> <code>?query=CVE-2023-0001</code></p>
+      <pre><code>{
+  "cve_id": "CVE-2023-0001",
+  "description": "...",
+  "cvss_score": 7.8
+}</code></pre>
+    </div>
+
+    <div id="cpes" class="api-section">
+      <h4 class="section-title">/api/cpes</h4>
+      <p><strong>설명:</strong> NVD CPE 정보를 검색합니다.</p>
+      <p><strong>Method:</strong> GET</p>
+      <p><strong>Query:</strong> <code>?query=openssl</code></p>
+      <pre><code>{
+  "cpe_uri": "cpe:2.3:a:openssl:openssl:1.1.1g:*:*:*:*:*:*:*",
+  "cve_id": "CVE-2023-0286"
+}</code></pre>
+    </div>
+
+    <div id="search" class="api-section">
+      <h4 class="section-title">/api/search</h4>
+      <p><strong>설명:</strong> 다건 RPM에 대해 매칭되는 CVE 정보를 조회합니다.</p>
+      <p><strong>Method:</strong> POST</p>
+      <pre><code>{
+  "rpm_list": ["openssl-1.1.1g-15.el8.x86_64", "bash-4.4.20"]
+}</code></pre>
+    </div>
+
+    <div id="search_single" class="api-section">
+      <h4 class="section-title">/api/search_single</h4>
+      <p><strong>설명:</strong> 단일 RPM에 대한 CVE 정보를 조회합니다.</p>
+      <p><strong>Method:</strong> POST</p>
+      <pre><code>{
+  "rpm_info": "openssl-1.1.1g-15.el8.x86_64"
+}</code></pre>
+      <pre><code>{
+  "cve_id": "CVE-2023-0286",
+  "cvss_score": 7.4,
+  "description": "X.509 vulnerability..."
+}</code></pre>
+    </div>
+
+    <div id="cisa_kev" class="api-section">
+      <h4 class="section-title">/api/cisa_kev</h4>
+      <p><strong>설명:</strong> CISA KEV 목록 조회</p>
+      <p><strong>Method:</strong> GET</p>
+      <pre><code>{
+  "cve_id": "CVE-2022-1388",
+  "known_exploited": true
+}</code></pre>
+    </div>
+
+    <div id="epss" class="api-section">
+      <h4 class="section-title">/api/epss</h4>
+      <p><strong>설명:</strong> EPSS 점수 조회</p>
+      <p><strong>Method:</strong> GET</p>
+      <pre><code>{
+  "cve_id": "CVE-2021-34527",
+  "epss_score": 0.924
+}</code></pre>
+    </div>
+
+    <div id="exploitdb" class="api-section">
+      <h4 class="section-title">/api/exploitdb</h4>
+      <p><strong>설명:</strong> Exploit-DB 데이터 조회</p>
+      <p><strong>Method:</strong> GET</p>
+      <pre><code>{
+  "cve_id": "CVE-2019-0708",
+  "exploit_url": "https://www.exploit-db.com/exploits/XXXX"
+}</code></pre>
+    </div>
+
+    <div id="metasploit" class="api-section">
+      <h4 class="section-title">/api/metasploit</h4>
+      <p><strong>설명:</strong> Metasploit 모듈 정보 조회</p>
+      <p><strong>Method:</strong> GET</p>
+      <pre><code>{
+  "cve_id": "CVE-2021-26855",
+  "module": "exploit/windows/http/exchange_proxylogon"
+}</code></pre>
+    </div>
+
+    <div id="poc_github" class="api-section">
+      <h4 class="section-title">/api/poc_github</h4>
+      <p><strong>설명:</strong> GitHub에 공개된 CVE 관련 PoC 링크 조회</p>
+      <p><strong>Method:</strong> GET</p>
+      <pre><code>{
+  "cve_id": "CVE-2023-23397",
+  "poc_link": "https://github.com/.../CVE-2023-23397"
+}</code></pre>
+    </div>
+
+    <div id="nuclei" class="api-section">
+      <h4 class="section-title">/api/nuclei</h4>
+      <p><strong>설명:</strong> Nuclei 기반 취약점 템플릿 정보</p>
+      <p><strong>Method:</strong> GET</p>
+      <pre><code>{
+  "cve_id": "CVE-2022-22965",
+  "name": "Spring4Shell",
+  "severity": "critical",
+  "cvss3_score": 9.8
+}</code></pre>
+    </div>
+
+  </div>
+</body>
+</html>

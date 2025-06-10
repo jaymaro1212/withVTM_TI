@@ -199,10 +199,15 @@ async def bulk_rpm_search(payload: BulkRpmQuery):
       results.append({"rpm_info": rpm, "data": []})
   return JSONResponse(content=json.loads(json.dumps(results, ensure_ascii=False)), media_type="application/json")
 
+@app.get("/ti_search", response_class=HTMLResponse)
+async def ti_search_ui(request: Request):
+  return templates.TemplateResponse("ti_search.html", {"request": request})
+
 @app.get("/api/cves")
 async def get_cves(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
+
 
   if query.strip():
     cursor.execute("""
@@ -219,7 +224,8 @@ async def get_cves(query: str = ""):
 @app.get("/api/cpes")
 async def get_cpes(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
+
   if query.strip():
     cursor.execute("""
       SELECT * FROM nvd_cpe 
@@ -237,11 +243,11 @@ async def get_cpes(query: str = ""):
 @app.get("/api/cisa_kev")
 async def get_cisa_kev(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
   if query:
-    cursor.execute("SELECT * FROM cisa_kev WHERE cve_id = %s", [query])
+    cursor.execute("SELECT * FROM cisa_kev WHERE cveID = %s", [query])
   else:
-    cursor.execute("SELECT * FROM cisa_kev ORDER BY id DESC LIMIT 20")
+    cursor.execute("SELECT * FROM cisa_kev ORDER BY dateAdded DESC LIMIT 20")
   rows = cursor.fetchall()
   conn.close()
   return {"data": rows}
@@ -249,11 +255,11 @@ async def get_cisa_kev(query: str = ""):
 @app.get("/api/epss")
 async def get_epss(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
   if query:
     cursor.execute("SELECT * FROM epss_scores WHERE cve = %s", [query])
   else:
-    cursor.execute("SELECT * FROM epss_scores ORDER BY id DESC LIMIT 20")
+    cursor.execute("SELECT * FROM epss_scores ORDER BY score_date DESC LIMIT 20")
   rows = cursor.fetchall()
   conn.close()
   return {"data": rows}
@@ -261,7 +267,7 @@ async def get_epss(query: str = ""):
 @app.get("/api/exploitdb")
 async def get_exploitdb(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
   if query:
     cursor.execute("SELECT * FROM exploitdb WHERE cve_code = %s", [query])
   else:
@@ -273,7 +279,7 @@ async def get_exploitdb(query: str = ""):
 @app.get("/api/metasploit")
 async def get_metasploit(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
   if query:
     cursor.execute("SELECT * FROM metasploit WHERE cve_id = %s", [query])
   else:
@@ -285,11 +291,11 @@ async def get_metasploit(query: str = ""):
 @app.get("/api/nuclei")
 async def get_nuclei(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
   if query:
     cursor.execute("SELECT * FROM nuclei WHERE cve_id = %s", [query])
   else:
-    cursor.execute("SELECT * FROM nuclei ORDER BY id DESC LIMIT 20")
+    cursor.execute("SELECT * FROM nuclei ORDER BY last_commit_date DESC LIMIT 20")
   rows = cursor.fetchall()
   conn.close()
   return {"data": rows}
@@ -297,7 +303,7 @@ async def get_nuclei(query: str = ""):
 @app.get("/api/poc_github")
 async def get_poc_github(query: str = ""):
   conn = get_connection()
-  cursor = conn.cursor()
+  cursor = conn.cursor(pymysql.cursors.DictCursor)
   if query:
     cursor.execute("SELECT * FROM poc_github WHERE cve_id = %s", [query])
   else:
@@ -306,38 +312,6 @@ async def get_poc_github(query: str = ""):
   conn.close()
   return {"data": rows}
 
-@app.get("/api/vulncheck_kev")
-async def get_vulncheck_kev(query: str = ""):
-  conn = get_connection()
-  cursor = conn.cursor()
-  if query:
-    cursor.execute("SELECT * FROM vulncheck_kev WHERE cve = %s", [query])
-  else:
-    cursor.execute("SELECT * FROM vulncheck_kev ORDER BY id DESC LIMIT 20")
-  rows = cursor.fetchall()
-  conn.close()
-  return {"data": rows}
-
-@app.post("/api/update")
-async def update_nvd_data(
-  start_date: str = Query(...),
-  end_date: str = Query(...),
-  mode: str = Query("published", pattern="^(published|modified)$")
-):
-  try:
-    start = parse_iso8601(start_date).isoformat() + ".000Z"
-    end = parse_iso8601(end_date).isoformat() + ".000Z"
-  except ValueError as ve:
-    return JSONResponse(status_code=400, content={"detail": str(ve)})
-
-  items = fetch_cves(start, end, mode)
-  insert_count, update_count = save_to_db(items)
-
-  return {
-    "detail": f" {mode} 기준 업데이트 완료",
-    "start_date": start_date,
-    "end_date": end_date,
-    "total_count": len(items),
-    "newly_inserted": insert_count,
-    "existing_updated": update_count
-  }
+@app.get("/api_guide", response_class=HTMLResponse)
+async def show_api_guide(request: Request):
+  return templates.TemplateResponse("api_guide.html", {"request": request})
