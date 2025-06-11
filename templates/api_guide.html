@@ -5,7 +5,9 @@
   <title>withTI API 가이드</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    body { display: flex; }
+    body {
+      display: flex;
+    }
     .sidebar {
       width: 250px;
       height: 100vh;
@@ -22,142 +24,1045 @@
       padding: 2rem;
       width: 100%;
     }
+    code {
+      background-color: #f1f1f1;
+      padding: 2px 4px;
+    }
     .section-title {
       margin-top: 3rem;
       margin-bottom: 1rem;
     }
     pre code {
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: block;
       background-color: #f8f9fa;
       padding: 1rem;
-      display: block;
+      border: 1px solid #dee2e6;
+      border-radius: 0.375rem;
+    }
+    .section {
+      padding-bottom: 2rem;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .badge-method {
+      font-size: 0.9em;
+      margin-right: 10px;
     }
   </style>
 </head>
 <body>
   <div class="sidebar">
     <h5 class="text-center">API 목록</h5>
-    <div class="list-group list-group-flush">
-      <a href="#cves" class="list-group-item">/api/cves</a>
-      <a href="#cpes" class="list-group-item">/api/cpes</a>
-      <a href="#search" class="list-group-item">/api/search</a>
-      <a href="#search_single" class="list-group-item">/api/search_single</a>
-      <a href="#cisa_kev" class="list-group-item">/api/cisa_kev</a>
-      <a href="#epss" class="list-group-item">/api/epss</a>
-      <a href="#exploitdb" class="list-group-item">/api/exploitdb</a>
-      <a href="#metasploit" class="list-group-item">/api/metasploit</a>
-      <a href="#poc_github" class="list-group-item">/api/poc_github</a>
-      <a href="#nuclei" class="list-group-item">/api/nuclei</a>
-    </div>
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link" href="#search_single">/api/search_single</a></li>
+      <li class="nav-item"><a class="nav-link" href="#search">/api/search</a></li>
+      <li class="nav-item"><a class="nav-link" href="#cves">/api/cves</a></li>
+      <li class="nav-item"><a class="nav-link" href="#cpes">/api/cpes</a></li>
+      <li class="nav-item"><a class="nav-link" href="#cisa_kev">/api/cisa_kev</a></li>
+      <li class="nav-item"><a class="nav-link" href="#epss">/api/epss</a></li>
+      <li class="nav-item"><a class="nav-link" href="#exploitdb">/api/exploitdb</a></li>
+      <li class="nav-item"><a class="nav-link" href="#metasploit">/api/metasploit</a></li>
+      <li class="nav-item"><a class="nav-link" href="#poc_github">/api/poc_github</a></li>
+      <li class="nav-item"><a class="nav-link" href="#nuclei">/api/nuclei</a></li>
+    </ul>
   </div>
+  <div class="content" id="api-guide-content">
+    <h2 class="mb-4">withTI API 가이드</h2>
 
-  <div class="content">
-    <h2>withTI API 가이드</h2>
-
-    <div id="cves" class="api-section">
-      <h4 class="section-title">/api/cves</h4>
-      <p><strong>설명:</strong> NVD CVE 정보를 검색합니다.</p>
-      <p><strong>Method:</strong> GET</p>
-      <p><strong>Query:</strong> <code>?query=CVE-2023-0001</code></p>
-      <pre><code>{
-  "cve_id": "CVE-2023-0001",
-  "description": "...",
-  "cvss_score": 7.8
-}</code></pre>
-    </div>
-
-    <div id="cpes" class="api-section">
-      <h4 class="section-title">/api/cpes</h4>
-      <p><strong>설명:</strong> NVD CPE 정보를 검색합니다.</p>
-      <p><strong>Method:</strong> GET</p>
-      <p><strong>Query:</strong> <code>?query=openssl</code></p>
-      <pre><code>{
-  "cpe_uri": "cpe:2.3:a:openssl:openssl:1.1.1g:*:*:*:*:*:*:*",
-  "cve_id": "CVE-2023-0286"
-}</code></pre>
-    </div>
-
-    <div id="search" class="api-section">
-      <h4 class="section-title">/api/search</h4>
-      <p><strong>설명:</strong> 다건 RPM에 대해 매칭되는 CVE 정보를 조회합니다.</p>
-      <p><strong>Method:</strong> POST</p>
-      <pre><code>{
-  "rpm_list": ["openssl-1.1.1g-15.el8.x86_64", "bash-4.4.20"]
-}</code></pre>
-    </div>
-
-    <div id="search_single" class="api-section">
-      <h4 class="section-title">/api/search_single</h4>
-      <p><strong>설명:</strong> 단일 RPM에 대한 CVE 정보를 조회합니다.</p>
-      <p><strong>Method:</strong> POST</p>
+    <div id="search_single" class="section">
+      <h4 class="section-title"><span class="badge bg-success badge-method">POST</span>/api/search_single</h4>
+      <p>단일 RPM에 대해 관련 CVE 및 연관 정보를 조회합니다.</p>
+      <h6>📥 Request</h6>
       <pre><code>{
   "rpm_info": "openssl-1.1.1g-15.el8.x86_64"
 }</code></pre>
+      <h6>📤 Response</h6>
       <pre><code>{
-  "cve_id": "CVE-2023-0286",
-  "cvss_score": 7.4,
-  "description": "X.509 vulnerability..."
+  "data": [
+    {
+      "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+      "vendor": "openssl",
+      "product": "openssl",
+      "version": "1.1.1 이상",
+      "cve_id": "CVE-2019-0190",
+      "cvss_score": 7.5,
+      "epss_score": 0.22248,
+      "risk_score": 0.66601,
+      "description": "A bug exists in the way mod_ssl handled client renegotiations. A remote attacker could send a carefully crafted request that would cause mod_ssl to enter a loop leading to a denial of service. This bug can be only triggered with Apache HTTP Server version 2.4.37 when using OpenSSL version 1.1.1 or later, due to an interaction in changes to handling of renegotiation attempts.",
+      "weaknesses": "NVD-CWE-noinfo",
+      "fixed_version": "",
+      "impact": "",
+      "remediation": "",
+      "poc_links": [],
+      "exploitdb_files": [],
+      "cisa_knownRansomware": "",
+      "cve_dueDate": "",
+      "references": []
+    },
+    {
+      "cpe_uri": "cpe:2.3:a:ruby-lang:openssl:*:*:*:*:*:ruby:*:*",
+      "vendor": "ruby-lang",
+      "product": "openssl",
+      "version": "2.1.2 미만",
+      "cve_id": "CVE-2018-16395",
+      "cvss_score": 9.8,
+      "epss_score": 0.08063,
+      "risk_score": 0.2008,
+      "description": "An issue was discovered in the OpenSSL library in Ruby before 2.3.8, 2.4.x before 2.4.5, 2.5.x before 2.5.2, and 2.6.x before 2.6.0-preview3. When two OpenSSL::X509::Name objects are compared using ==, depending on the ordering, non-equal objects may return true. When the first argument is one character longer than the second, or the second argument contains a character that is one less than a character in the same position of the first argument, the result of == will be true. This could be leveraged to create an illegitimate certificate that may be accepted as legitimate and then used in signing or encryption operations.",
+      "weaknesses": "NVD-CWE-noinfo",
+      "fixed_version": "",
+      "impact": "",
+      "remediation": "",
+      "poc_links": [],
+      "exploitdb_files": [],
+      "cisa_knownRansomware": "",
+      "cve_dueDate": "",
+      "references": []
+    },
+    {
+      "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+      "vendor": "openssl",
+      "product": "openssl",
+      "version": "1.1.1 이상 ~ 1.1.1k 미만",
+      "cve_id": "CVE-2021-3449",
+      "cvss_score": 5.9,
+      "epss_score": 0.13055,
+      "risk_score": 0.02554,
+      "description": "An OpenSSL TLS server may crash if sent a maliciously crafted renegotiation ClientHello message from a client. If a TLSv1.2 renegotiation ClientHello omits the signature_algorithms extension (where it was present in the initial ClientHello), but includes a signature_algorithms_cert extension then a NULL pointer dereference will result, leading to a crash and a denial of service attack. A server is only vulnerable if it has TLSv1.2 and renegotiation enabled (which is the default configuration). OpenSSL TLS clients are not impacted by this issue. All OpenSSL 1.1.1 versions are affected by this issue. Users of these versions should upgrade to OpenSSL 1.1.1k. OpenSSL 1.0.2 is not impacted by this issue. Fixed in OpenSSL 1.1.1k (Affected 1.1.1-1.1.1j).",
+      "weaknesses": "CWE-476",
+      "fixed_version": "",
+      "impact": "",
+      "remediation": "",
+      "poc_links": [
+        "https://github.com/riptl/cve-2021-3449"
+      ],
+      "exploitdb_files": [],
+      "cisa_knownRansomware": "",
+      "cve_dueDate": "",
+      "references": []
+    },
+    {
+      "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+      "vendor": "openssl",
+      "product": "openssl",
+      "version": "1.1.1 이상 ~ 1.1.1l 미만",
+      "cve_id": "CVE-2021-3711",
+      "cvss_score": 9.8,
+      "epss_score": 0.02848,
+      "risk_score": 0.00556,
+      "description": "In order to decrypt SM2 encrypted data an application is expected to call the API function EVP_PKEY_decrypt(). Typically an application will call this function twice. The first time, on entry, the \"out\" parameter can be NULL and, on exit, the \"outlen\" parameter is populated with the buffer size required to hold the decrypted plaintext. The application can then allocate a sufficiently sized buffer and call EVP_PKEY_decrypt() again, but this time passing a non-NULL value for the \"out\" parameter. A bug in the implementation of the SM2 decryption code means that the calculation of the buffer size required to hold the plaintext returned by the first call to EVP_PKEY_decrypt() can be smaller than the actual size required by the second call. This can lead to a buffer overflow when EVP_PKEY_decrypt() is called by the application a second time with a buffer that is too small. A malicious attacker who is able present SM2 content for decryption to an application could cause attacker chosen data to overflow the buffer by up to a maximum of 62 bytes altering the contents of other data held after the buffer, possibly changing application behaviour or causing the application to crash. The location of the buffer is application dependent but is typically heap allocated. Fixed in OpenSSL 1.1.1l (Affected 1.1.1-1.1.1k).",
+      "weaknesses": "CWE-120",
+      "fixed_version": "",
+      "impact": "",
+      "remediation": "",
+      "poc_links": [],
+      "exploitdb_files": [],
+      "cisa_knownRansomware": "",
+      "cve_dueDate": "",
+      "references": []
+    },
+    {
+      "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+      "vendor": "openssl",
+      "product": "openssl",
+      "version": "1.1.1 이상 ~ 1.1.1l 미만",
+      "cve_id": "CVE-2021-3712",
+      "cvss_score": 7.4,
+      "epss_score": 0.00844,
+      "risk_score": 0.00002,
+      "description": "ASN.1 strings are represented internally within OpenSSL as an ASN1_STRING structure which contains a buffer holding the string data and a field holding the buffer length. This contrasts with normal C strings which are repesented as a buffer for the string data which is terminated with a NUL (0) byte. Although not a strict requirement, ASN.1 strings that are parsed using OpenSSL's own \"d2i\" functions (and other similar parsing functions) as well as any string whose value has been set with the ASN1_STRING_set() function will additionally NUL terminate the byte array in the ASN1_STRING structure. However, it is possible for applications to directly construct valid ASN1_STRING structures which do not NUL terminate the byte array by directly setting the \"data\" and \"length\" fields in the ASN1_STRING array. This can also happen by using the ASN1_STRING_set0() function. Numerous OpenSSL functions that print ASN.1 data have been found to assume that the ASN1_STRING byte array will be NUL terminated, even though this is not guaranteed for strings that have been directly constructed. Where an application requests an ASN.1 structure to be printed, and where that ASN.1 structure contains ASN1_STRINGs that have been directly constructed by the application without NUL terminating the \"data\" field, then a read buffer overrun can occur. The same thing can also occur during name constraints processing of certificates (for example if a certificate has been directly constructed by the application instead of loading it via the OpenSSL parsing functions, and the certificate contains non NUL terminated ASN1_STRING structures). It can also occur in the X509_get1_email(), X509_REQ_get1_email() and X509_get1_ocsp() functions. If a malicious actor can cause an application to directly construct an ASN1_STRING and then process it through one of the affected OpenSSL functions then this issue could be hit. This might result in a crash (causing a Denial of Service attack). It could also result in the disclosure of private memory contents (such as private keys, or sensitive plaintext). Fixed in OpenSSL 1.1.1l (Affected 1.1.1-1.1.1k). Fixed in OpenSSL 1.0.2za (Affected 1.0.2-1.0.2y).",
+      "weaknesses": "CWE-125",
+      "fixed_version": "",
+      "impact": "",
+      "remediation": "",
+      "poc_links": [],
+      "exploitdb_files": [],
+      "cisa_knownRansomware": "",
+      "cve_dueDate": "",
+      "references": []
+    }
+  ]
+  ]
 }</code></pre>
     </div>
 
-    <div id="cisa_kev" class="api-section">
-      <h4 class="section-title">/api/cisa_kev</h4>
-      <p><strong>설명:</strong> CISA KEV 목록 조회</p>
-      <p><strong>Method:</strong> GET</p>
+    <div id="search" class="section">
+      <h4 class="section-title"><span class="badge bg-success badge-method">POST</span>/api/search</h4>
+      <p>다건 RPM에 대해 매칭되는 CVE 정보를 조회합니다.</p>
+      <h6>📥 Request</h6>
       <pre><code>{
-  "cve_id": "CVE-2022-1388",
-  "known_exploited": true
+  "rpm_info": [
+    "openssl-1.1.1g-15.el8.x86_64",
+    "bash-4.4.20"
+  ]
+}</code></pre>
+      <h6>📤 Response</h6>
+      <pre><code>[
+  {
+    "rpm_info": "openssl-1.1.1g-15.el8.x86_64",
+    "data": [
+      {
+        "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+        "vendor": "openssl",
+        "product": "openssl",
+        "version": "1.1.1 이상",
+        "cve_id": "CVE-2019-0190",
+        "cvss_score": 7.5,
+        "epss_score": 0.22248,
+        "risk_score": 0.66601,
+        "description": "A bug exists in the way mod_ssl handled client renegotiations. A remote attacker could send a carefully crafted request that would cause mod_ssl to enter a loop leading to a denial of service. This bug can be only triggered with Apache HTTP Server version 2.4.37 when using OpenSSL version 1.1.1 or later, due to an interaction in changes to handling of renegotiation attempts.",
+        "weaknesses": "NVD-CWE-noinfo",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:ruby-lang:openssl:*:*:*:*:*:ruby:*:*",
+        "vendor": "ruby-lang",
+        "product": "openssl",
+        "version": "2.1.2 미만",
+        "cve_id": "CVE-2018-16395",
+        "cvss_score": 9.8,
+        "epss_score": 0.08063,
+        "risk_score": 0.2008,
+        "description": "An issue was discovered in the OpenSSL library in Ruby before 2.3.8, 2.4.x before 2.4.5, 2.5.x before 2.5.2, and 2.6.x before 2.6.0-preview3. When two OpenSSL::X509::Name objects are compared using ==, depending on the ordering, non-equal objects may return true. When the first argument is one character longer than the second, or the second argument contains a character that is one less than a character in the same position of the first argument, the result of == will be true. This could be leveraged to create an illegitimate certificate that may be accepted as legitimate and then used in signing or encryption operations.",
+        "weaknesses": "NVD-CWE-noinfo",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+        "vendor": "openssl",
+        "product": "openssl",
+        "version": "1.1.1 이상 ~ 1.1.1k 미만",
+        "cve_id": "CVE-2021-3449",
+        "cvss_score": 5.9,
+        "epss_score": 0.13055,
+        "risk_score": 0.02554,
+        "description": "An OpenSSL TLS server may crash if sent a maliciously crafted renegotiation ClientHello message from a client. If a TLSv1.2 renegotiation ClientHello omits the signature_algorithms extension (where it was present in the initial ClientHello), but includes a signature_algorithms_cert extension then a NULL pointer dereference will result, leading to a crash and a denial of service attack. A server is only vulnerable if it has TLSv1.2 and renegotiation enabled (which is the default configuration). OpenSSL TLS clients are not impacted by this issue. All OpenSSL 1.1.1 versions are affected by this issue. Users of these versions should upgrade to OpenSSL 1.1.1k. OpenSSL 1.0.2 is not impacted by this issue. Fixed in OpenSSL 1.1.1k (Affected 1.1.1-1.1.1j).",
+        "weaknesses": "CWE-476",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [
+          "https://github.com/riptl/cve-2021-3449"
+        ],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+        "vendor": "openssl",
+        "product": "openssl",
+        "version": "1.1.1 이상 ~ 1.1.1l 미만",
+        "cve_id": "CVE-2021-3711",
+        "cvss_score": 9.8,
+        "epss_score": 0.02848,
+        "risk_score": 0.00556,
+        "description": "In order to decrypt SM2 encrypted data an application is expected to call the API function EVP_PKEY_decrypt(). Typically an application will call this function twice. The first time, on entry, the \"out\" parameter can be NULL and, on exit, the \"outlen\" parameter is populated with the buffer size required to hold the decrypted plaintext. The application can then allocate a sufficiently sized buffer and call EVP_PKEY_decrypt() again, but this time passing a non-NULL value for the \"out\" parameter. A bug in the implementation of the SM2 decryption code means that the calculation of the buffer size required to hold the plaintext returned by the first call to EVP_PKEY_decrypt() can be smaller than the actual size required by the second call. This can lead to a buffer overflow when EVP_PKEY_decrypt() is called by the application a second time with a buffer that is too small. A malicious attacker who is able present SM2 content for decryption to an application could cause attacker chosen data to overflow the buffer by up to a maximum of 62 bytes altering the contents of other data held after the buffer, possibly changing application behaviour or causing the application to crash. The location of the buffer is application dependent but is typically heap allocated. Fixed in OpenSSL 1.1.1l (Affected 1.1.1-1.1.1k).",
+        "weaknesses": "CWE-120",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*",
+        "vendor": "openssl",
+        "product": "openssl",
+        "version": "1.1.1 이상 ~ 1.1.1l 미만",
+        "cve_id": "CVE-2021-3712",
+        "cvss_score": 7.4,
+        "epss_score": 0.00844,
+        "risk_score": 0.00002,
+        "description": "ASN.1 strings are represented internally within OpenSSL as an ASN1_STRING structure which contains a buffer holding the string data and a field holding the buffer length. This contrasts with normal C strings which are repesented as a buffer for the string data which is terminated with a NUL (0) byte. Although not a strict requirement, ASN.1 strings that are parsed using OpenSSL's own \"d2i\" functions (and other similar parsing functions) as well as any string whose value has been set with the ASN1_STRING_set() function will additionally NUL terminate the byte array in the ASN1_STRING structure. However, it is possible for applications to directly construct valid ASN1_STRING structures which do not NUL terminate the byte array by directly setting the \"data\" and \"length\" fields in the ASN1_STRING array. This can also happen by using the ASN1_STRING_set0() function. Numerous OpenSSL functions that print ASN.1 data have been found to assume that the ASN1_STRING byte array will be NUL terminated, even though this is not guaranteed for strings that have been directly constructed. Where an application requests an ASN.1 structure to be printed, and where that ASN.1 structure contains ASN1_STRINGs that have been directly constructed by the application without NUL terminating the \"data\" field, then a read buffer overrun can occur. The same thing can also occur during name constraints processing of certificates (for example if a certificate has been directly constructed by the application instead of loading it via the OpenSSL parsing functions, and the certificate contains non NUL terminated ASN1_STRING structures). It can also occur in the X509_get1_email(), X509_REQ_get1_email() and X509_get1_ocsp() functions. If a malicious actor can cause an application to directly construct an ASN1_STRING and then process it through one of the affected OpenSSL functions then this issue could be hit. This might result in a crash (causing a Denial of Service attack). It could also result in the disclosure of private memory contents (such as private keys, or sensitive plaintext). Fixed in OpenSSL 1.1.1l (Affected 1.1.1-1.1.1k). Fixed in OpenSSL 1.0.2za (Affected 1.0.2-1.0.2y).",
+        "weaknesses": "CWE-125",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      }
+    ]
+  },
+  {
+    "rpm_info": "bash-4.4.20",
+    "data": [
+      {
+        "cpe_uri": "cpe:2.3:a:gnu:bash:*:*:*:*:*:*:*:*",
+        "vendor": "gnu",
+        "product": "bash",
+        "version": "5.0 이하",
+        "cve_id": "CVE-2019-18276",
+        "cvss_score": 7.8,
+        "epss_score": 0.40022,
+        "risk_score": 5.49849,
+        "description": "An issue was discovered in disable_priv_mode in shell.c in GNU Bash through 5.0 patch 11. By default, if Bash is run with its effective UID not equal to its real UID, it will drop privileges by setting its effective UID to its real UID. However, it does so incorrectly. On Linux and other systems that support \"saved UID\" functionality, the saved UID is not dropped. An attacker with command execution in the shell can use \"enable -f\" for runtime loading of a new builtin, which can be a shared object that calls setuid() and therefore regains privileges. However, binaries running with an effective UID of 0 are unaffected.",
+        "weaknesses": "CWE-273; CWE-273",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [
+          "https://github.com/M-ensimag/CVE-2019-18276",
+          "https://github.com/SABI-Ensimag/CVE-2019-18276"
+        ],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:gnu:bash:4.4:patch1:*:*:*:*:*:*",
+        "vendor": "gnu",
+        "product": "bash",
+        "version": "4.4",
+        "cve_id": "CVE-2016-9401",
+        "cvss_score": 5.5,
+        "epss_score": 0.00015,
+        "risk_score": 0,
+        "description": "popd in bash might allow local users to bypass the restricted shell and cause a use-after-free via a crafted address.",
+        "weaknesses": "CWE-416",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:gnu:bash:4.4:patch2:*:*:*:*:*:*",
+        "vendor": "gnu",
+        "product": "bash",
+        "version": "4.4",
+        "cve_id": "CVE-2016-9401",
+        "cvss_score": 5.5,
+        "epss_score": 0.00015,
+        "risk_score": 0,
+        "description": "popd in bash might allow local users to bypass the restricted shell and cause a use-after-free via a crafted address.",
+        "weaknesses": "CWE-416",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:gnu:bash:4.4:patch3:*:*:*:*:*:*",
+        "vendor": "gnu",
+        "product": "bash",
+        "version": "4.4",
+        "cve_id": "CVE-2016-9401",
+        "cvss_score": 5.5,
+        "epss_score": 0.00015,
+        "risk_score": 0,
+        "description": "popd in bash might allow local users to bypass the restricted shell and cause a use-after-free via a crafted address.",
+        "weaknesses": "CWE-416",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      },
+      {
+        "cpe_uri": "cpe:2.3:a:gnu:bash:4.4:patch4:*:*:*:*:*:*",
+        "vendor": "gnu",
+        "product": "bash",
+        "version": "4.4",
+        "cve_id": "CVE-2016-9401",
+        "cvss_score": 5.5,
+        "epss_score": 0.00015,
+        "risk_score": 0,
+        "description": "popd in bash might allow local users to bypass the restricted shell and cause a use-after-free via a crafted address.",
+        "weaknesses": "CWE-416",
+        "fixed_version": "",
+        "impact": "",
+        "remediation": "",
+        "poc_links": [],
+        "exploitdb_files": [],
+        "cisa_knownRansomware": "",
+        "cve_dueDate": "",
+        "references": []
+      }
+    ]
+  }
+]
+R</code></pre>
+    </div>
+
+    <div id="cves" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/cves</h4>
+      <p>CVE ID 또는 설명 키워드를 기준으로 CVE 목록을 조회합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=CVE-2023-0001</code></pre>
+      <h6>📤 Response</h6>
+      <pre><code>{
+  "data": [
+    {
+      "cve_id": "CVE-2021-4125",
+      "c_id": 193219,
+      "description": "It was found that the original fix for log4j CVE-2021-44228 and CVE-2021-45046 in the OpenShift metering hive containers was incomplete, as not all JndiLookup.class files were removed. This CVE only applies to the OpenShift Metering hive container images, shipped in OpenShift 4.8, 4.7 and 4.6.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "nvd@nist.gov",
+      "cvss3_score": 8.1,
+      "cvss3_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 8.1,
+      "weaknesses": "CWE-20; CWE-502",
+      "published_date": "2022-08-24T16:15:09",
+      "modified_date": "2024-11-21T06:36:57",
+      "risk_score": 0,
+      "z_score": 0.7225,
+      "integrated_score": 0.6857,
+      "grpn_score": 0.6489,
+      "last_updated_at": "2025-06-06T22:51:29"
+    },
+    {
+      "cve_id": "CVE-2022-33915",
+      "c_id": 188444,
+      "description": "Versions of the Amazon AWS Apache Log4j hotpatch package before log4j-cve-2021-44228-hotpatch-1.3.5 are affected by a race condition that could lead to a local privilege escalation. This Hotpatch package is not a replacement for updating to a log4j version that mitigates CVE-2021-44228 or CVE-2021-45046; it provides a temporary mitigation to CVE-2021-44228 by hotpatching the local Java virtual machines. To do so, it iterates through all running Java processes, performs several checks, and executes the Java virtual machine with the same permissions and capabilities as the running process to load the hotpatch. A local user could cause the hotpatch script to execute a binary with elevated privileges by running a custom java process that performs exec() of an SUID binary after the hotpatch has observed the process path and before it has observed its effective user ID.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "cve@mitre.org",
+      "cvss3_score": 7,
+      "cvss3_vector": "CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 7,
+      "weaknesses": "CWE-362",
+      "published_date": "2022-06-17T13:15:17",
+      "modified_date": "2024-11-21T07:08:35",
+      "risk_score": 0,
+      "z_score": 0.1181,
+      "integrated_score": 0.314,
+      "grpn_score": 0.51,
+      "last_updated_at": "2025-06-06T22:50:56"
+    },
+    {
+      "cve_id": "CVE-2021-3100",
+      "c_id": 184417,
+      "description": "The Apache Log4j hotpatch package before log4j-cve-2021-44228-hotpatch-1.1-13 didn’t mimic the permissions of the JVM being patched, allowing it to escalate privileges.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "psirt@paloaltonetworks.com",
+      "cvss3_score": 8.8,
+      "cvss3_vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 8.8,
+      "weaknesses": "CWE-250; CWE-269",
+      "published_date": "2022-04-19T23:15:13",
+      "modified_date": "2024-11-21T06:20:53",
+      "risk_score": 0,
+      "z_score": 1.1071,
+      "integrated_score": 0.9222,
+      "grpn_score": 0.7374,
+      "last_updated_at": "2025-06-06T22:49:48"
+    },
+    {
+      "cve_id": "CVE-2022-0070",
+      "c_id": 184419,
+      "description": "Incomplete fix for CVE-2021-3100. The Apache Log4j hotpatch package starting with log4j-cve-2021-44228-hotpatch-1.1-16 will now explicitly mimic the Linux capabilities and cgroups of the target Java process that the hotpatch is applied to.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "psirt@paloaltonetworks.com",
+      "cvss3_score": 8.8,
+      "cvss3_vector": "CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 8.8,
+      "weaknesses": "CWE-250; CWE-269",
+      "published_date": "2022-04-19T23:15:13",
+      "modified_date": "2024-11-21T06:37:51",
+      "risk_score": 0,
+      "z_score": 1.1071,
+      "integrated_score": 0.9222,
+      "grpn_score": 0.7374,
+      "last_updated_at": "2025-06-06T22:49:48"
+    },
+    {
+      "cve_id": "CVE-2022-23848",
+      "c_id": 180290,
+      "description": "In Alluxio before 2.7.3, the logserver does not validate the input stream. NOTE: this is not the same as the CVE-2021-44228 Log4j vulnerability.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "nvd@nist.gov",
+      "cvss3_score": 9.8,
+      "cvss3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 9.8,
+      "weaknesses": "NVD-CWE-noinfo",
+      "published_date": "2022-02-20T19:15:09",
+      "modified_date": "2024-11-21T06:49:21",
+      "risk_score": 0.00004,
+      "z_score": 1.6565,
+      "integrated_score": 1.3043,
+      "grpn_score": 0.952,
+      "last_updated_at": "2025-06-06T22:49:12"
+    },
+    {
+      "cve_id": "CVE-2021-44530",
+      "c_id": 177606,
+      "description": "An injection vulnerability exists in a third-party library used in UniFi Network Version 6.5.53 and earlier (Log4J CVE-2021-44228) allows a malicious actor to control the application.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "nvd@nist.gov",
+      "cvss3_score": 9.8,
+      "cvss3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 9.8,
+      "weaknesses": "CWE-20; CWE-74",
+      "published_date": "2022-01-14T20:15:12",
+      "modified_date": "2024-11-21T06:31:10",
+      "risk_score": 0.00015,
+      "z_score": 1.6565,
+      "integrated_score": 1.3043,
+      "grpn_score": 0.952,
+      "last_updated_at": "2025-06-06T22:48:33"
+    },
+    {
+      "cve_id": "CVE-2021-45046",
+      "c_id": 174909,
+      "description": "It was found that the fix to address CVE-2021-44228 in Apache Log4j 2.15.0 was incomplete in certain non-default configurations. This could allows attackers with control over Thread Context Map (MDC) input data when the logging configuration uses a non-default Pattern Layout with either a Context Lookup (for example, $${ctx:loginId}) or a Thread Context Map pattern (%X, %mdc, or %MDC) to craft malicious input data using a JNDI Lookup pattern resulting in an information leak and remote code execution in some environments and local code execution in all environments. Log4j 2.16.0 (Java 8) and 2.12.2 (Java 7) fix this issue by removing support for message lookup patterns and disabling JNDI functionality by default.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "nvd@nist.gov",
+      "cvss3_score": 9,
+      "cvss3_vector": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:C/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 9,
+      "weaknesses": "CWE-917; CWE-917",
+      "published_date": "2021-12-14T19:15:07",
+      "modified_date": "2025-03-12T19:52:00",
+      "risk_score": 9.99999,
+      "z_score": 1.2169,
+      "integrated_score": 0.9884,
+      "grpn_score": 0.76,
+      "last_updated_at": "2025-06-06T22:47:50"
+    },
+    {
+      "cve_id": "CVE-2021-4104",
+      "c_id": 174855,
+      "description": "JMSAppender in Log4j 1.2 is vulnerable to deserialization of untrusted data when the attacker has write access to the Log4j configuration. The attacker can provide TopicBindingName and TopicConnectionFactoryBindingName configurations causing JMSAppender to perform JNDI requests that result in remote code execution in a similar fashion to CVE-2021-44228. Note this issue only affects Log4j 1.2 when specifically configured to use JMSAppender, which is not the default. Apache Log4j 1.2 reached end of life in August 2015. Users should upgrade to Log4j 2 as it addresses numerous other issues from the previous versions.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "nvd@nist.gov",
+      "cvss3_score": 7.5,
+      "cvss3_vector": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 7.5,
+      "weaknesses": "CWE-502; CWE-502",
+      "published_date": "2021-12-14T12:15:12",
+      "modified_date": "2024-11-21T06:36:54",
+      "risk_score": 9.83541,
+      "z_score": 0.3928,
+      "integrated_score": 0.483,
+      "grpn_score": 0.5732,
+      "last_updated_at": "2025-06-06T22:47:50"
+    },
+    {
+      "cve_id": "CVE-2021-44228",
+      "c_id": 174663,
+      "description": "Apache Log4j2 2.0-beta9 through 2.15.0 (excluding security releases 2.12.2, 2.12.3, and 2.3.1) JNDI features used in configuration, log messages, and parameters do not protect against attacker controlled LDAP and other JNDI related endpoints. An attacker who can control log messages or log message parameters can execute arbitrary code loaded from LDAP servers when message lookup substitution is enabled. From log4j 2.15.0, this behavior has been disabled by default. From version 2.16.0 (along with 2.12.2, 2.12.3, and 2.3.1), this functionality has been completely removed. Note that this vulnerability is specific to log4j-core and does not affect log4net, log4cxx, or other Apache Logging Services projects.",
+      "cvss4_source": null,
+      "cvss4_score": null,
+      "cvss4_vector": null,
+      "cvss4_severity": null,
+      "cvss3_source": "nvd@nist.gov",
+      "cvss3_score": 10,
+      "cvss3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+      "cvss3_severity": "",
+      "cvss2_source": null,
+      "cvss2_score": null,
+      "cvss2_vector": null,
+      "cvss2_severity": null,
+      "cvss_score": 10,
+      "weaknesses": "CWE-20; CWE-400; CWE-502; CWE-917",
+      "published_date": "2021-12-10T10:15:09",
+      "modified_date": "2025-04-03T20:53:22",
+      "risk_score": 10,
+      "z_score": 1.7664,
+      "integrated_score": 1.3832,
+      "grpn_score": 1,
+      "last_updated_at": "2025-06-06T22:47:48"
+    }
+  ]
 }</code></pre>
     </div>
 
-    <div id="epss" class="api-section">
-      <h4 class="section-title">/api/epss</h4>
-      <p><strong>설명:</strong> EPSS 점수 조회</p>
-      <p><strong>Method:</strong> GET</p>
+    <div id="cpes" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/cpes</h4>
+      <p>CPE URI 또는 관련 CVE를 기준으로 CPE 정보를 검색합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=openssl</code></pre>
+      <h6>📤 Response</h6>
       <pre><code>{
-  "cve_id": "CVE-2021-34527",
-  "epss_score": 0.924
+  "data": [
+    {
+      "id": 2282415,
+      "c_id": 220644,
+      "cve_id": "CVE-2023-3817",
+      "cpe_uri": "cpe:2.3:a:openssl:openssl:1.1.1g:*:*:*:*:*:*:*",
+      "part": "a",
+      "vendor": "openssl",
+      "product": "openssl",
+      "version": "1.1.1g",
+      "published_date": "2023-07-31T16:15:10",
+      "update_col": "*",
+      "edition": "*",
+      "language": "*",
+      "sw_edition": "*",
+      "target_sw": "*",
+      "target_hw": "*",
+      "other": "*",
+      "vulnerable": 1,
+      "versionStartIncluding": null,
+      "versionStartExcluding": null,
+      "versionEndIncluding": null,
+      "versionEndExcluding": null,
+      "modified_date": null
+    }
+  ]
 }</code></pre>
     </div>
 
-    <div id="exploitdb" class="api-section">
-      <h4 class="section-title">/api/exploitdb</h4>
-      <p><strong>설명:</strong> Exploit-DB 데이터 조회</p>
-      <p><strong>Method:</strong> GET</p>
+    <div id="cisa_kev" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/cisa_kev</h4>
+      <p>CISA에서 지정한 Known Exploited Vulnerabilities 목록을 조회합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=CVE-2022-1388</code></pre>
+      <h6>📤 Response</h6>
       <pre><code>{
-  "cve_id": "CVE-2019-0708",
-  "exploit_url": "https://www.exploit-db.com/exploits/XXXX"
+  "data": [
+    {
+      "cveID": "CVE-2022-1388",
+      "vendorProject": "F5",
+      "product": "BIG-IP",
+      "vulnerabilityName": "F5 BIG-IP Missing Authentication Vulnerability",
+      "dateAdded": "2022-05-10",
+      "shortDescription": "F5 BIG-IP contains a missing authentication in critical function vulnerability which can allow for remote code execution, creation or deletion of files, or disabling services.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2022-05-31",
+      "knownRansomwareCampaignUse": "Known",
+      "notes": "https://nvd.nist.gov/vuln/detail/CVE-2022-1388",
+      "actionStatus": "CWE-306",
+      "cisaVulnerabilityName": null,
+      "cwes": null,
+      "last_updated_at": "2025-06-11T09:05:08"
+    }
+  ]
 }</code></pre>
     </div>
 
-    <div id="metasploit" class="api-section">
-      <h4 class="section-title">/api/metasploit</h4>
-      <p><strong>설명:</strong> Metasploit 모듈 정보 조회</p>
-      <p><strong>Method:</strong> GET</p>
+    <div id="epss" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/epss</h4>
+      <p>CVE에 대한 EPSS(Exploit Prediction Scoring System) 점수를 제공합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=CVE-2022-1388</code></pre>
+      <h6>📤 Response</h6>
       <pre><code>{
-  "cve_id": "CVE-2021-26855",
-  "module": "exploit/windows/http/exchange_proxylogon"
+  "data": [
+    {
+      "cve": "CVE-2022-1388",
+      "epss": 0.94456,
+      "percentile": 0.99991,
+      "score_date": null,
+      "last_updated_at": null
+    }
+  ]
 }</code></pre>
     </div>
 
-    <div id="poc_github" class="api-section">
-      <h4 class="section-title">/api/poc_github</h4>
-      <p><strong>설명:</strong> GitHub에 공개된 CVE 관련 PoC 링크 조회</p>
-      <p><strong>Method:</strong> GET</p>
+    <div id="exploitdb" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/exploitdb</h4>
+      <p>Exploit-DB에 등록된 CVE 관련 공격 코드 정보를 조회합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=CVE-2019-0708</code></pre>
+      <h6>📤 Response</h6>
       <pre><code>{
-  "cve_id": "CVE-2023-23397",
-  "poc_link": "https://github.com/.../CVE-2023-23397"
+  "data": [
+    {
+      "id": 28065,
+      "ex_id": 46946,
+      "file": "exploits/windows/dos/46946.py",
+      "description": "Microsoft Windows Remote Desktop - 'BlueKeep' Denial of Service",
+      "date_published": "2019-05-30",
+      "author": "n1xbyte",
+      "type": "dos",
+      "platform": "windows",
+      "port": "",
+      "date_added": "2019-05-31",
+      "date_updated": "2019-06-03",
+      "verified": "0",
+      "cve_code": "CVE-2019-0708",
+      "tags": "",
+      "aliases": "",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "https://github.com/n1xbyte/CVE-2019-0708/blob/b44a1ec077c56f0400cb2cb6faf40180b87459a6/crashpoc.py\r"
+    },
+    {
+      "id": 28066,
+      "ex_id": 47416,
+      "file": "exploits/windows/remote/47416.rb",
+      "description": "Microsoft Windows - BlueKeep RDP Remote Windows Kernel Use After Free (Metasploit)",
+      "date_published": "2019-09-24",
+      "author": "Metasploit",
+      "type": "remote",
+      "platform": "windows",
+      "port": "3389",
+      "date_added": "2019-09-24",
+      "date_updated": "2019-09-24",
+      "verified": "1",
+      "cve_code": "CVE-2019-0708",
+      "tags": "Metasploit Framework (MSF)",
+      "aliases": "",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "https://raw.githubusercontent.com/rapid7/metasploit-framework/master/modules/exploits/windows/rdp/cve_2019_0708_bluekeep_rce.rb\r"
+    },
+    {
+      "id": 28067,
+      "ex_id": 47120,
+      "file": "exploits/windows/dos/47120.rb",
+      "description": "Microsoft Windows Remote Desktop - 'BlueKeep' Denial of Service (Metasploit)",
+      "date_published": "2019-07-15",
+      "author": "RAMELLA Sebastien",
+      "type": "dos",
+      "platform": "windows",
+      "port": "3389",
+      "date_added": "2019-07-15",
+      "date_updated": "2019-07-15",
+      "verified": "0",
+      "cve_code": "CVE-2019-0708",
+      "tags": "Metasploit Framework (MSF)",
+      "aliases": "Bluekeep",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "\r"
+    },
+    {
+      "id": 28068,
+      "ex_id": 47683,
+      "file": "exploits/windows_x86/remote/47683.py",
+      "description": "Microsoft Windows 7 (x86) - 'BlueKeep' Remote Desktop Protocol (RDP) Remote Windows Kernel Use After Free",
+      "date_published": "2019-11-19",
+      "author": "0xeb-bp",
+      "type": "remote",
+      "platform": "windows_x86",
+      "port": "",
+      "date_added": "2019-11-19",
+      "date_updated": "2019-11-19",
+      "verified": "0",
+      "cve_code": "CVE-2019-0708",
+      "tags": "",
+      "aliases": "",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "https://github.com/0xeb-bp/bluekeep/tree/334443948296e8624c76a5ae30a2562658afd176\r"
+    },
+    {
+      "id": 156952,
+      "ex_id": 46946,
+      "file": "exploits/windows/dos/46946.py",
+      "description": "Microsoft Windows Remote Desktop - 'BlueKeep' Denial of Service",
+      "date_published": "2019-05-30",
+      "author": "n1xbyte",
+      "type": "dos",
+      "platform": "windows",
+      "port": "",
+      "date_added": "2025-06-01",
+      "date_updated": "2025-06-01",
+      "verified": "0",
+      "cve_code": "CVE-2019-0708",
+      "tags": "",
+      "aliases": "",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "https://github.com/n1xbyte/CVE-2019-0708/blob/b44a1ec077c56f0400cb2cb6faf40180b87459a6/crashpoc.py"
+    },
+    {
+      "id": 156953,
+      "ex_id": 47120,
+      "file": "exploits/windows/dos/47120.rb",
+      "description": "Microsoft Windows Remote Desktop - 'BlueKeep' Denial of Service (Metasploit)",
+      "date_published": "2019-07-15",
+      "author": "RAMELLA Sebastien",
+      "type": "dos",
+      "platform": "windows",
+      "port": "3389",
+      "date_added": "2025-06-01",
+      "date_updated": "2025-06-01",
+      "verified": "0",
+      "cve_code": "CVE-2019-0708",
+      "tags": "Metasploit Framework (MSF)",
+      "aliases": "Bluekeep",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": ""
+    },
+    {
+      "id": 156954,
+      "ex_id": 47120,
+      "file": "exploits/windows/dos/47120.rb",
+      "description": "Microsoft Windows Remote Desktop - 'BlueKeep' Denial of Service (Metasploit)",
+      "date_published": "2019-07-15",
+      "author": "RAMELLA Sebastien",
+      "type": "dos",
+      "platform": "windows",
+      "port": "3389",
+      "date_added": "2025-06-01",
+      "date_updated": "2025-06-01",
+      "verified": "0",
+      "cve_code": "CVE-2019-0708",
+      "tags": "Denial of Service (DoS)",
+      "aliases": "Bluekeep",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": ""
+    },
+    {
+      "id": 163377,
+      "ex_id": 47416,
+      "file": "exploits/windows/remote/47416.rb",
+      "description": "Microsoft Windows - BlueKeep RDP Remote Windows Kernel Use After Free (Metasploit)",
+      "date_published": "2019-09-24",
+      "author": "Metasploit",
+      "type": "remote",
+      "platform": "windows",
+      "port": "3389",
+      "date_added": "2025-06-01",
+      "date_updated": "2025-06-01",
+      "verified": "1",
+      "cve_code": "CVE-2019-0708",
+      "tags": "Metasploit Framework (MSF)",
+      "aliases": "",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "https://raw.githubusercontent.com/rapid7/metasploit-framework/master/modules/exploits/windows/rdp/cve_2019_0708_bluekeep_rce.rb"
+    },
+    {
+      "id": 163378,
+      "ex_id": 47416,
+      "file": "exploits/windows/remote/47416.rb",
+      "description": "Microsoft Windows - BlueKeep RDP Remote Windows Kernel Use After Free (Metasploit)",
+      "date_published": "2019-09-24",
+      "author": "Metasploit",
+      "type": "remote",
+      "platform": "windows",
+      "port": "3389",
+      "date_added": "2025-06-01",
+      "date_updated": "2025-06-01",
+      "verified": "1",
+      "cve_code": "CVE-2019-0708",
+      "tags": "Use After Free (UAF)",
+      "aliases": "",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "https://raw.githubusercontent.com/rapid7/metasploit-framework/master/modules/exploits/windows/rdp/cve_2019_0708_bluekeep_rce.rb"
+    },
+    {
+      "id": 165336,
+      "ex_id": 47683,
+      "file": "exploits/windows_x86/remote/47683.py",
+      "description": "Microsoft Windows 7 (x86) - 'BlueKeep' Remote Desktop Protocol (RDP) Remote Windows Kernel Use After Free",
+      "date_published": "2019-11-19",
+      "author": "0xeb-bp",
+      "type": "remote",
+      "platform": "windows_x86",
+      "port": "",
+      "date_added": "2025-06-01",
+      "date_updated": "2025-06-01",
+      "verified": "0",
+      "cve_code": "CVE-2019-0708",
+      "tags": "",
+      "aliases": "",
+      "screenshot_url": "",
+      "application_url": "",
+      "source_url": "https://github.com/0xeb-bp/bluekeep/tree/334443948296e8624c76a5ae30a2562658afd176"
+    }
+  ]
+}
 }</code></pre>
     </div>
 
-    <div id="nuclei" class="api-section">
-      <h4 class="section-title">/api/nuclei</h4>
-      <p><strong>설명:</strong> Nuclei 기반 취약점 템플릿 정보</p>
-      <p><strong>Method:</strong> GET</p>
+    <div id="metasploit" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/metasploit</h4>
+      <p>Metasploit 모듈에서 사용하는 CVE 정보 및 공격 벡터를 조회합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=CVE-2021-26855</code></pre>
+      <h6>📤 Response</h6>
       <pre><code>{
-  "cve_id": "CVE-2022-22965",
-  "name": "Spring4Shell",
-  "severity": "critical",
-  "cvss3_score": 9.8
+  "data": [
+    {
+      "id": 466,
+      "name": "Microsoft Exchange ProxyLogon Collector",
+      "disclosure_date": "2021-03-02",
+      "description": "This module exploit a vulnerability on Microsoft Exchange Server that\n          allows an attacker bypassing the authentication and impersonating as the\n          admin (CVE-2021-26855).\n\n          By taking advantage of this vulnerability, it is possible to dump all\n          mailboxes (emails, attachments, contacts, ...).\n\n          This vulnerability affects (Exchange 2013 Versions < 15.00.1497.012,\n          Exchange 2016 CU18 < 15.01.2106.013, Exchange 2016 CU19 < 15.01.2176.009,\n          Exchange 2019 CU7 < 15.02.0721.013, Exchange 2019 CU8 < 15.02.0792.010).\n\n          All components are vulnerable by default.",
+      "fullname": "auxiliary_gather/exchange_proxylogon_collector",
+      "type": "auxiliary",
+      "path": "/modules/auxiliary/gather/exchange_proxylogon_collector.rb",
+      "autofilter_ports": "[80, 8080, 443, 8000, 8888, 8880, 8008, 3000, 8443]",
+      "autofilter_services": "['http', 'https']",
+      "mod_time": "2024-01-07 15:02:53 +0000",
+      "vuln_check": 0,
+      "rank": "300",
+      "cve_id": "CVE-2021-26855",
+      "reference": "[\"CVE-2021-26855\", \"LOGO-https://proxylogon.com/images/logo.jpg\", \"URL-https://proxylogon.com/\", \"URL-https://msrc-blog.microsoft.com/2021/03/02/multiple-security-updates-released-for-exchange-server/\", \"URL-https://docs.microsoft.com/en-us/exchange/client-developer/web-service-reference/distinguishedfolderid\", \"URL-https://github.com/3gstudent/Homework-of-Python/blob/master/ewsManage.py\"]"
+    },
+    {
+      "id": 731,
+      "name": "Microsoft Exchange ProxyLogon Scanner",
+      "disclosure_date": "2021-03-02",
+      "description": "This module scan for a vulnerability on Microsoft Exchange Server that\n          allows an attacker bypassing the authentication and impersonating as the\n          admin (CVE-2021-26855).\n\n          By chaining this bug with another post-auth arbitrary-file-write\n          vulnerability to get code execution (CVE-2021-27065).\n\n          As a result, an unauthenticated attacker can execute arbitrary commands on\n          Microsoft Exchange Server.\n\n          This vulnerability affects (Exchange 2013 Versions < 15.00.1497.012,\n          Exchange 2016 CU18 < 15.01.2106.013, Exchange 2016 CU19 < 15.01.2176.009,\n          Exchange 2019 CU7 < 15.02.0721.013, Exchange 2019 CU8 < 15.02.0792.010).\n\n          All components are vulnerable by default.",
+      "fullname": "auxiliary_scanner/http/exchange_proxylogon",
+      "type": "auxiliary",
+      "path": "/modules/auxiliary/scanner/http/exchange_proxylogon.rb",
+      "autofilter_ports": "[80, 8080, 443, 8000, 8888, 8880, 8008, 3000, 8443]",
+      "autofilter_services": "['http', 'https']",
+      "mod_time": "2024-01-07 15:02:53 +0000",
+      "vuln_check": 0,
+      "rank": "300",
+      "cve_id": "CVE-2021-26855",
+      "reference": "[\"CVE-2021-26855\", \"LOGO-https://proxylogon.com/images/logo.jpg\", \"URL-https://proxylogon.com/\", \"URL-https://msrc-blog.microsoft.com/2021/03/02/multiple-security-updates-released-for-exchange-server/\"]"
+    },
+    {
+      "id": 3601,
+      "name": "Microsoft Exchange ProxyLogon RCE",
+      "disclosure_date": "2021-03-02",
+      "description": "This module exploit a vulnerability on Microsoft Exchange Server that\n          allows an attacker bypassing the authentication, impersonating as the\n          admin (CVE-2021-26855) and write arbitrary file (CVE-2021-27065) to get\n          the RCE (Remote Code Execution).\n\n          By taking advantage of this vulnerability, you can execute arbitrary\n          commands on the remote Microsoft Exchange Server.\n\n          This vulnerability affects (Exchange 2013 Versions < 15.00.1497.012,\n          Exchange 2016 CU18 < 15.01.2106.013, Exchange 2016 CU19 < 15.01.2176.009,\n          Exchange 2019 CU7 < 15.02.0721.013, Exchange 2019 CU8 < 15.02.0792.010).\n\n          All components are vulnerable by default.",
+      "fullname": "exploit_windows/http/exchange_proxylogon_rce",
+      "type": "exploit",
+      "path": "/modules/exploits/windows/http/exchange_proxylogon_rce.rb",
+      "autofilter_ports": "[80, 8080, 443, 8000, 8888, 8880, 8008, 3000, 8443]",
+      "autofilter_services": "['http', 'https']",
+      "mod_time": "2023-02-08 15:20:32 +0000",
+      "vuln_check": 1,
+      "rank": "600",
+      "cve_id": "CVE-2021-26855",
+      "reference": "[\"CVE-2021-26855\", \"CVE-2021-27065\", \"LOGO-https://proxylogon.com/images/logo.jpg\", \"URL-https://proxylogon.com/\", \"URL-http://aka.ms/exchangevulns\", \"URL-https://www.praetorian.com/blog/reproducing-proxylogon-exploit\", \"URL-https://testbnull.medium.com/ph%C3%A2n-t%C3%ADch-l%E1%BB%97-h%E1%BB%95ng-proxylogon-mail-exchange-rce-s%E1%BB%B1-k%E1%BA%BFt-h%E1%BB%A3p-ho%C3%A0n-h%E1%BA%A3o-cve-2021-26855-37f4b6e06265\", \"URL-https://www.o2oxy.cn/3169.html\", \"URL-https://github.com/praetorian-inc/proxylogon-exploit\", \"URL-https://github.com/Zeop-CyberSec/proxylogon_writeup\"]"
+    }
+  ]
+}</code></pre>
+    </div>
+
+    <div id="poc_github" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/poc_github</h4>
+      <p>GitHub에 등록된 공개 PoC(Proof of Concept) 정보를 제공합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=CVE-2023-23397</code></pre>
+      <h6>📤 Response</h6>
+      <pre><code>{
+  "data": [
+    {
+      "id": 326,
+      "c_id": 6838,
+      "full_name": "Mahesh-970/CVE-2025-0086",
+      "poc_link": "https://github.com/Mahesh-970/CVE-2025-0086",
+      "cve_id": "CVE-2025-0086"
+    }
+  ]
+}}</code></pre>
+    </div>
+
+    <div id="nuclei" class="section">
+      <h4 class="section-title"><span class="badge bg-primary badge-method">GET</span>/api/nuclei</h4>
+      <p>Nuclei 기반 템플릿의 취약점 정보, 영향도 및 조치 방안을 제공합니다.</p>
+      <h6>🔎 Query</h6>
+      <pre><code>?query=CVE-2005-4385</code></pre>
+      <h6>📤 Response</h6>
+      <pre><code>{
+  "data": [
+    {
+      "cve_id": "CVE-2005-4385",
+      "name": "Cofax <=2.0RC3 - Cross-Site Scripting",
+      "description": "Cofax 2.0 RC3 and earlier contains a cross-site scripting vulnerability in search.htm which allows remote attackers to inject arbitrary web script or HTML via the searchstring parameter.",
+      "severity": "medium",
+      "remediation": "Upgrade to a version of Cofax that is not affected by this vulnerability or apply the necessary patches provided by the vendor.\n",
+      "reference": "http://pridels0.blogspot.com/2005/12/cofax-xss-vuln.html, https://nvd.nist.gov/vuln/detail/CVE-2005-4385, http://www.vupen.com/english/advisories/2005/2977, https://github.com/ARPSyndicate/kenzer-templates",
+      "vendor": "cofax",
+      "product": "cofax",
+      "impact": "Successful exploitation of this vulnerability could allow an attacker to execute malicious scripts in the context of the victim's browser, potentially leading to session hijacking, defacement, or theft of sensitive information.\n",
+      "raw": null,
+      "matchers": "[{\"type\": \"word\", \"part\": \"body\", \"words\": [\"'>\\\"</script><script>alert(document.domain)</script>\"]}, {\"type\": \"status\", \"status\": [200]}]",
+      "fixed_version": null,
+      "last_commit_date": "2024-12-01"
+    }
+  ]
 }</code></pre>
     </div>
 
