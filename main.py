@@ -208,18 +208,112 @@ async def get_cves(query: str = ""):
   conn = get_connection()
   cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-
-  if query.strip():
+  if not query.strip():
     cursor.execute("""
-      SELECT * FROM nvd_cve 
-      WHERE cve_id = %s OR description LIKE %s
+      SELECT cve_id, published_date, description, cvss_score, risk_score
+      FROM nvd_cve
       ORDER BY published_date DESC LIMIT 20
-    """, [query, f"%{query}%"])
-  else:
-    cursor.execute("SELECT * FROM nvd_cve ORDER BY published_date DESC LIMIT 20")
-  rows = cursor.fetchall()
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return {"data": rows}
+
+  cve_id = query.strip()
+
+  # nvd_cve
+  cursor.execute("""
+    SELECT cve_id, published_date, description, cvss_score, risk_score, weaknesses
+    FROM nvd_cve
+    WHERE cve_id = %s
+  """, [cve_id])
+  cve_row = cursor.fetchone()
+  if not cve_row:
+    conn.close()
+    return {"error": "CVE ID가 존재하지 않습니다."}
+
+  # epss_scores
+  cursor.execute("SELECT epss FROM epss_scores WHERE cve = %s", [cve_id])
+  epss_row = cursor.fetchone()
+  epss_score = epss_row["epss"] if epss_row else None
+
+  # nvd_cpe
+  cursor.execute("""
+    SELECT cpe_uri, vendor, product, version,
+           versionStartIncluding, versionStartExcluding,
+           versionEndIncluding, versionEndExcluding
+    FROM nvd_cpe
+    WHERE cve_id = %s
+  """, [cve_id])
+  raw_cpe_rows = cursor.fetchall()
+
+  affected_products = []
+  for row in raw_cpe_rows:
+    version_range = row["version"] or "-"
+    if row.get("versionStartIncluding") or row.get("versionStartExcluding") or row.get("versionEndIncluding") or row.get("versionEndExcluding"):
+      parts = []
+      if row.get("versionStartIncluding"):
+        parts.append(f"{row['versionStartIncluding']} 이상")
+      elif row.get("versionStartExcluding"):
+        parts.append(f"{row['versionStartExcluding']} 초과")
+      if row.get("versionEndIncluding"):
+        parts.append(f"{row['versionEndIncluding']} 이하")
+      elif row.get("versionEndExcluding"):
+        parts.append(f"{row['versionEndExcluding']} 미만")
+      version_range = " ~ ".join(parts)
+
+    affected_products.append({
+      "cpe_uri": row["cpe_uri"],
+      "vendor": row["vendor"],
+      "product": row["product"],
+      "version": version_range
+    })
+
+  # nuclei
+  cursor.execute("""
+    SELECT fixed_version, remediation, reference
+    FROM nuclei
+    WHERE cve_id = %s
+  """, [cve_id])
+  nuclei_row = cursor.fetchone()
+  fixed_version = remediation = nuclei_reference = None
+  if nuclei_row:
+    fixed_version = nuclei_row.get("fixed_version")
+    remediation = nuclei_row.get("remediation")
+    nuclei_reference = nuclei_row.get("reference")
+
+  # exploitdb
+  cursor.execute("SELECT file FROM exploitdb WHERE cve_code = %s", [cve_id])
+  exploitdb_files = [row["file"] for row in cursor.fetchall() if row.get("file")]
+
+  # metasploit
+  cursor.execute("SELECT reference FROM metasploit WHERE cve_id = %s", [cve_id])
+  metasploit_refs = [row["reference"] for row in cursor.fetchall() if row.get("reference")]
+
+  # poc_github
+  cursor.execute("SELECT poc_link FROM poc_github WHERE cve_id = %s", [cve_id])
+  poc_links = [row["poc_link"] for row in cursor.fetchall() if row.get("poc_link")]
+
   conn.close()
-  return {"data": rows}
+
+  return {
+    "data": [{
+      "cve_id": cve_row["cve_id"],
+      "published_date": str(cve_row["published_date"]),
+      "description": cve_row["description"],
+      "cvss_score": cve_row["cvss_score"],
+      "risk_score": cve_row["risk_score"],
+      "weaknesses": cve_row["weaknesses"],
+      "epss": epss_score,
+      "affected_products": affected_products,
+      "fixed_version": fixed_version,
+      "remediation": remediation,
+      "nuclei_reference": nuclei_reference,
+      "exploitdb_files": exploitdb_files,
+      "metasploit_refs": metasploit_refs,
+      "github_poc_links": poc_links
+    }]
+  }
+
 
 @app.get("/api/cpes")
 async def get_cpes(query: str = ""):
