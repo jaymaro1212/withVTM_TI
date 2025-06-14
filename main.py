@@ -5,8 +5,9 @@ from pydantic import BaseModel, Field
 from typing import List
 import pymysql
 import re
-from distutils.version import LooseVersion
 from database import get_connection
+from distutils.version import LooseVersion
+from collections import defaultdict
 import json
 
 app = FastAPI()
@@ -53,7 +54,7 @@ def is_version_matched(rpm_v, row, raw_version):
     vse = row.get("versionStartExcluding")
     vei = row.get("versionEndIncluding")
     vee = row.get("versionEndExcluding")
-    if exact and exact.strip() == raw_version:
+    if exact and exact.strip() in ("*", "-", raw_version):
       return True
     if (vsi or vse or vei or vee) and (
       (not vsi or rpm_v >= safe(vsi)) and
@@ -65,6 +66,49 @@ def is_version_matched(rpm_v, row, raw_version):
   except:
     return False
   return False
+
+def format_version_range(row):
+  s = e = None
+  s_incl = e_incl = True
+  version = row.get("version")
+
+  if row.get("versionStartIncluding"):
+    s = row["versionStartIncluding"]
+    s_incl = True
+  elif row.get("versionStartExcluding"):
+    s = row["versionStartExcluding"]
+    s_incl = False
+
+  if row.get("versionEndIncluding"):
+    e = row["versionEndIncluding"]
+    e_incl = True
+  elif row.get("versionEndExcluding"):
+    e = row["versionEndExcluding"]
+    e_incl = False
+
+  is_all_empty = all(
+    not row.get(col) or str(row[col]).strip() in ("", "-", "None")
+    for col in ["versionStartIncluding", "versionStartExcluding", "versionEndIncluding", "versionEndExcluding", "version"]
+  )
+
+  if is_all_empty:
+    return "모든 버전"
+
+  if not s and not e:
+    if version == "*" or version is None:
+      return "모든 버전"
+    return version
+
+  if s == e and s_incl and e_incl:
+    return s
+
+  parts = []
+  if s and s not in ("정보 없음", "-", "None", "*"):
+    parts.append(f"{s} 이상" if s_incl else f"{s} 초과")
+  if e and e not in ("정보 없음", "-", "None", "*"):
+    parts.append(f"{e} 이하" if e_incl else f"{e} 미만")
+
+  return " ~ ".join(parts) if parts else "정보 없음"
 
 def handle_rpm_lookup(query: str, offset: int = 0):
   conn = get_connection()
@@ -92,9 +136,9 @@ def handle_rpm_lookup(query: str, offset: int = 0):
       cpe.cve_id, cve.cvss_score, cve.risk_score, cve.description, cve.weaknesses
     FROM nvd_cpe AS cpe
     JOIN nvd_cve AS cve ON cpe.cve_id = cve.cve_id
-    WHERE cpe.product = %s
+    WHERE cpe.product LIKE %s
     ORDER BY cve.risk_score DESC
-  """, [product])
+  """, [product + '%'])
   rows = cursor.fetchall()
 
   result = []
@@ -143,18 +187,7 @@ def handle_rpm_lookup(query: str, offset: int = 0):
         remediation = nuclei_row.get("remediation", "") or ""
         fixed_version = nuclei_row.get("fixed_version", "") or ""
 
-      version_range = row["version"] or "-"
-      if row.get("versionStartIncluding") or row.get("versionStartExcluding") or row.get("versionEndIncluding") or row.get("versionEndExcluding"):
-        parts = []
-        if row.get("versionStartIncluding"):
-          parts.append(f"{row['versionStartIncluding']} 이상")
-        elif row.get("versionStartExcluding"):
-          parts.append(f"{row['versionStartExcluding']} 초과")
-        if row.get("versionEndIncluding"):
-          parts.append(f"{row['versionEndIncluding']} 이하")
-        elif row.get("versionEndExcluding"):
-          parts.append(f"{row['versionEndExcluding']} 미만")
-        version_range = " ~ ".join(parts)
+      version_range = format_version_range(row)
 
       result.append({
         "cpe_uri": row["cpe_uri"],
@@ -246,10 +279,11 @@ async def get_cves(query: str = ""):
   """, [cve_id])
   raw_cpe_rows = cursor.fetchall()
 
-  affected_products = []
+  product_map = defaultdict(list)
   for row in raw_cpe_rows:
     version_range = row["version"] or "-"
-    if row.get("versionStartIncluding") or row.get("versionStartExcluding") or row.get("versionEndIncluding") or row.get("versionEndExcluding"):
+    if row.get("versionStartIncluding") or row.get("versionStartExcluding") or row.get(
+            "versionEndIncluding") or row.get("versionEndExcluding"):
       parts = []
       if row.get("versionStartIncluding"):
         parts.append(f"{row['versionStartIncluding']} 이상")
@@ -261,11 +295,17 @@ async def get_cves(query: str = ""):
         parts.append(f"{row['versionEndExcluding']} 미만")
       version_range = " ~ ".join(parts)
 
+    key = (row["vendor"], row["product"])
+    arch = row["cpe_uri"].split(":")[-2]
+    product_map[key].append(f"{version_range} ({arch})")
+
+  # 최종 정리
+  affected_products = []
+  for (vendor, product), versions in product_map.items():
     affected_products.append({
-      "cpe_uri": row["cpe_uri"],
-      "vendor": row["vendor"],
-      "product": row["product"],
-      "version": version_range
+      "vendor": vendor,
+      "product": product,
+      "versions": versions
     })
 
   # nuclei
@@ -409,3 +449,183 @@ async def get_poc_github(query: str = ""):
 @app.get("/api_guide", response_class=HTMLResponse)
 async def show_api_guide(request: Request):
   return templates.TemplateResponse("api_guide.html", {"request": request})
+
+from collections import defaultdict
+from distutils.version import LooseVersion
+
+@app.get("/api/vuln")
+async def get_vuln(query: str = ""):
+    from time import time
+    t0 = time()
+
+    conn = get_connection()
+    cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+    if not query.strip():
+        cursor.execute("""
+            SELECT cve_id, published_date, description, cvss_score, risk_score
+            FROM nvd_cve
+            ORDER BY published_date DESC LIMIT 20
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+        return {"data": rows}
+
+    cve_id = query.strip()
+
+    # 1. CVE 기본 정보
+    cursor.execute("""
+        SELECT cve_id, published_date, description, cvss_score, risk_score, weaknesses
+        FROM nvd_cve
+        WHERE cve_id = %s
+    """, [cve_id])
+    cve_row = cursor.fetchone()
+    if not cve_row:
+        conn.close()
+        return {"error": "CVE ID가 존재하지 않습니다."}
+
+    # 2. EPSS
+    cursor.execute("SELECT epss FROM epss_scores WHERE cve = %s", [cve_id])
+    epss_row = cursor.fetchone()
+    epss_score = epss_row["epss"] if epss_row else None
+
+    # 3. nuclei
+    cursor.execute("""
+        SELECT fixed_version, remediation, reference
+        FROM nuclei
+        WHERE cve_id = %s
+    """, [cve_id])
+    nuclei_row = cursor.fetchone()
+    fixed_version = remediation = nuclei_reference = None
+    if nuclei_row:
+        fixed_version = nuclei_row.get("fixed_version")
+        remediation = nuclei_row.get("remediation")
+        nuclei_reference = nuclei_row.get("reference")
+
+    # 4. 영향 받는 제품 정리
+    cursor.execute("""
+        SELECT vendor, product, version,
+               versionStartIncluding, versionStartExcluding,
+               versionEndIncluding, versionEndExcluding
+        FROM nvd_cpe
+        WHERE cve_id = %s
+    """, [cve_id])
+    cpe_rows = cursor.fetchall()
+
+    product_bounds = defaultdict(list)
+
+    for row in cpe_rows:
+        vendor = row.get("vendor", "")
+        product = row.get("product", "")
+        key = product
+
+        s = e = None
+        s_incl = e_incl = True
+        version = row.get("version")
+
+        if row.get("versionStartIncluding"):
+            s = row["versionStartIncluding"]
+            s_incl = True
+        elif row.get("versionStartExcluding"):
+            s = row["versionStartExcluding"]
+            s_incl = False
+
+        if row.get("versionEndIncluding"):
+            e = row["versionEndIncluding"]
+            e_incl = True
+        elif row.get("versionEndExcluding"):
+            e = row["versionEndExcluding"]
+            e_incl = False
+
+        is_all_empty = all(
+            not row.get(col) or str(row[col]).strip() in ("", "-", "None")
+            for col in [
+                "versionStartIncluding",
+                "versionStartExcluding",
+                "versionEndIncluding",
+                "versionEndExcluding",
+                "version"
+            ]
+        )
+
+        if is_all_empty:
+            product_bounds[key].append(("정보 없음", "정보 없음", True, True))
+        elif not s and not e:
+            if version == "*" or version is None:
+                product_bounds[key].append(("*", "*", True, True))  # 모든 버전
+            else:
+                product_bounds[key].append((version, version, True, True))  # 단일 버전
+        else:
+            product_bounds[key].append((s, e, s_incl, e_incl))
+
+    # 새 포맷 함수 추가
+    def format_single_range(s, e, s_incl, e_incl):
+        parts = []
+        if s and s not in ("정보 없음", "-", "None"):
+            parts.append(f"{s} {'이상' if s_incl else '초과'}")
+        if e and e not in ("정보 없음", "-", "None"):
+            parts.append(f"{e} {'이하' if e_incl else '미만'}")
+        return " ~ ".join(parts) if parts else "정보 없음"
+
+    # 변경된 affected_products 생성
+    affected_products = []
+    for product, bounds in product_bounds.items():
+        version_ranges = set()
+        for b in bounds:
+            if not b or len(b) != 4:
+                continue
+            s, e, s_incl, e_incl = b
+
+            # 모두 없음 또는 '*' 처리
+            if s in ("정보 없음", "-", "None", "*") and e in ("정보 없음", "-", "None", "*"):
+                version_ranges.add("모든 버전")
+                continue
+
+            # 시작과 끝이 같고 포함일 경우 → 단일 버전
+            if s == e and s_incl and e_incl:
+                version_ranges.add(s)
+                continue
+
+            # 일반 범위 표현
+            parts = []
+            if s and s not in ("정보 없음", "-", "None", "*"):
+                parts.append(f"{s} 이상" if s_incl else f"{s} 초과")
+            if e and e not in ("정보 없음", "-", "None", "*"):
+                parts.append(f"{e} 이하" if e_incl else f"{e} 미만")
+
+            version_ranges.add(" ~ ".join(parts) if parts else "정보 없음")
+
+        affected_products.append({
+            "product_name": product,
+            "vulnerable_versions": sorted(version_ranges)
+        })
+
+    # 5. Exploit 관련
+    def fetch_list(query, param):
+        cursor.execute(query, [param])
+        return [row[list(row.keys())[0]] for row in cursor.fetchall() if list(row.values())[0]]
+
+    exploitdb_files = fetch_list("SELECT file FROM exploitdb WHERE cve_code = %s", cve_id)
+    metasploit_refs = fetch_list("SELECT reference FROM metasploit WHERE cve_id = %s", cve_id)
+    poc_links = fetch_list("SELECT poc_link FROM poc_github WHERE cve_id = %s", cve_id)
+
+    conn.close()
+    print(f"[✅ DONE] /api/vuln 처리시간: {time() - t0:.2f}s")
+
+    return {
+        "data": [{
+            "cve_id": cve_row["cve_id"],
+            "published_date": str(cve_row["published_date"]),
+            "description": cve_row["description"],
+            "cvss_score": cve_row["cvss_score"],
+            "risk_score": cve_row["risk_score"],
+            "weaknesses": cve_row["weaknesses"],
+            "epss": epss_score,
+            "affected_products": affected_products,
+            "remediation": remediation,
+            "nuclei_reference": nuclei_reference,
+            "exploitdb_files": exploitdb_files,
+            "metasploit_refs": metasploit_refs,
+            "github_poc_links": poc_links
+        }]
+    }

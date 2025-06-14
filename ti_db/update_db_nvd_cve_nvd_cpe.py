@@ -47,16 +47,23 @@ def fetch_cves(start_iso: str, end_iso: str):
 
 def extract_cvss_data(metrics):
   data = {}
-  for version in ["cvssMetricV4", "cvssMetricV31", "cvssMetricV2"]:
+  for version in ["cvssMetricV4", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2"]:
     if version in metrics:
       metric = metrics[version][0]
-      v = version[-2:] if version != "cvssMetricV31" else "3"
+      v = (
+        "40" if version == "cvssMetricV4" else
+        "31" if version == "cvssMetricV31" else
+        "30" if version == "cvssMetricV30" else
+        "20"
+      )
       cvss = metric.get("cvssData", {})
       data[f"cvss{v}_source"] = metric.get("source")
       data[f"cvss{v}_severity"] = metric.get("baseSeverity", "")
       data[f"cvss{v}_score"] = cvss.get("baseScore", "")
       data[f"cvss{v}_vector"] = cvss.get("vectorString", "")
   return data
+
+
 
 def extract_weaknesses(cve):
   out = []
@@ -97,7 +104,13 @@ def save_items(items):
   existing_cves = {row["cve_id"]: row for row in cursor.fetchall()}
 
   cursor.execute("SELECT c_id, cpe_uri, id, vulnerable, versionStartIncluding, versionStartExcluding, versionEndIncluding, versionEndExcluding, part, vendor, product FROM nvd_cpe")
-  existing_cpes = {(row["c_id"], row["cpe_uri"]): row for row in cursor.fetchall()}
+  existing_cpes = {
+    (
+      row["c_id"], row["cpe_uri"],
+      row["versionStartIncluding"], row["versionStartExcluding"],
+      row["versionEndIncluding"], row["versionEndExcluding"]
+    ): row for row in cursor.fetchall()
+  }
 
   for item in items:
     cve = item["cve"]
@@ -108,34 +121,74 @@ def save_items(items):
     cvss = extract_cvss_data(cve.get("metrics", {}))
     weaknesses = extract_weaknesses(cve)
 
+
+
     if cve_id not in existing_cves:
       cursor.execute("""
-        INSERT INTO nvd_cve (cve_id, description, published_date, modified_date,
-          cvss2_source, cvss2_severity, cvss2_score, cvss2_vector,
-          cvss3_source, cvss3_severity, cvss3_score, cvss3_vector,
-          cvss4_source, cvss4_severity, cvss4_score, cvss4_vector, weaknesses)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-      """, (cve_id, description, published, modified,
-            cvss.get("cvss2_source"), cvss.get("cvss2_severity"), cvss.get("cvss2_score"), cvss.get("cvss2_vector"),
-            cvss.get("cvss3_source"), cvss.get("cvss3_severity"), cvss.get("cvss3_score"), cvss.get("cvss3_vector"),
-            cvss.get("cvss4_source"), cvss.get("cvss4_severity"), cvss.get("cvss4_score"), cvss.get("cvss4_vector"),
-            weaknesses))
+                     INSERT INTO nvd_cve (cve_id, description, published_date, modified_date,
+                                          cvss20_source, cvss20_severity, cvss20_score, cvss20_vector,
+                                          cvss30_source, cvss30_severity, cvss30_score, cvss30_vector,
+                                          cvss31_source, cvss31_severity, cvss31_score, cvss31_vector,
+                                          cvss40_source, cvss40_severity, cvss40_score, cvss40_vector,
+                                          weaknesses)
+                     VALUES (%s, %s, %s, %s,
+                             %s, %s, %s, %s,
+                             %s, %s, %s, %s,
+                             %s, %s, %s, %s,
+                             %s, %s, %s, %s,
+                             %s)
+                     """, (
+        cve_id, description, published, modified,
+        cvss.get("cvss20_source"), cvss.get("cvss20_severity"), cvss.get("cvss20_score"),
+        cvss.get("cvss20_vector"),
+        cvss.get("cvss30_source"), cvss.get("cvss30_severity"), cvss.get("cvss30_score"),
+        cvss.get("cvss30_vector"),
+        cvss.get("cvss31_source"), cvss.get("cvss31_severity"), cvss.get("cvss31_score"),
+        cvss.get("cvss31_vector"),
+        cvss.get("cvss40_source"), cvss.get("cvss40_severity"), cvss.get("cvss40_score"),
+        cvss.get("cvss40_vector"), weaknesses
+                     ))
+
       c_id = cursor.lastrowid
       cve_inserted += 1
     else:
       c_id = existing_cves[cve_id]["c_id"]
       if existing_cves[cve_id]["modified_date"] != modified:
         cursor.execute("""
-          UPDATE nvd_cve SET description=%s, published_date=%s, modified_date=%s,
-          cvss2_source=%s, cvss2_severity=%s, cvss2_score=%s, cvss2_vector=%s,
-          cvss3_source=%s, cvss3_severity=%s, cvss3_score=%s, cvss3_vector=%s,
-          cvss4_source=%s, cvss4_severity=%s, cvss4_score=%s, cvss4_vector=%s,
-          weaknesses=%s WHERE cve_id=%s
-        """, (description, published, modified,
-              cvss.get("cvss2_source"), cvss.get("cvss2_severity"), cvss.get("cvss2_score"), cvss.get("cvss2_vector"),
-              cvss.get("cvss3_source"), cvss.get("cvss3_severity"), cvss.get("cvss3_score"), cvss.get("cvss3_vector"),
-              cvss.get("cvss4_source"), cvss.get("cvss4_severity"), cvss.get("cvss4_score"), cvss.get("cvss4_vector"),
-              weaknesses, cve_id))
+                       UPDATE nvd_cve
+                       SET description=%s,
+                           published_date=%s,
+                           modified_date=%s,
+                           cvss20_source=%s,
+                           cvss20_severity=%s,
+                           cvss20_score=%s,
+                           cvss20_vector=%s,
+                           cvss30_source=%s,
+                           cvss30_severity=%s,
+                           cvss30_score=%s,
+                           cvss30_vector=%s,
+                           cvss31_source=%s,
+                           cvss31_severity=%s,
+                           cvss31_score=%s,
+                           cvss31_vector=%s,
+                           cvss40_source=%s,
+                           cvss40_severity=%s,
+                           cvss40_score=%s,
+                           cvss40_vector=%s,
+                           weaknesses=%s
+                       WHERE cve_id = %s
+                       """, (
+                         description, published, modified,
+                         cvss.get("cvss20_source"), cvss.get("cvss20_severity"), cvss.get("cvss20_score"),
+                         cvss.get("cvss20_vector"),
+                         cvss.get("cvss30_source"), cvss.get("cvss30_severity"), cvss.get("cvss30_score"),
+                         cvss.get("cvss30_vector"),
+                         cvss.get("cvss31_source"), cvss.get("cvss31_severity"), cvss.get("cvss31_score"),
+                         cvss.get("cvss31_vector"),
+                         cvss.get("cvss40_source"), cvss.get("cvss40_severity"), cvss.get("cvss40_score"),
+                         cvss.get("cvss40_vector"), weaknesses, cve_id
+                       ))
+
         cve_updated += 1
 
     cpe_list = []
@@ -144,7 +197,11 @@ def save_items(items):
 
     for cpe in cpe_list:
       uri = cpe["uri"]
-      key = (c_id, uri)
+      key = (
+        c_id, uri,
+        cpe["versionStartIncluding"], cpe["versionStartExcluding"],
+        cpe["versionEndIncluding"], cpe["versionEndExcluding"]
+      )
       if key not in existing_cpes:
         cursor.execute("""
           INSERT INTO nvd_cpe (
@@ -163,7 +220,7 @@ def save_items(items):
               published, modified))
         cpe_inserted += 1
       else:
-        ex = existing_cpes[key]
+        ex = existing_cpes.get(key)
         if (
           ex["vulnerable"] != cpe["vulnerable"] or
           not null_eq(ex["versionStartIncluding"], cpe["versionStartIncluding"]) or
@@ -193,7 +250,8 @@ def save_items(items):
   return cve_inserted, cve_updated, cpe_inserted, cpe_updated
 
 if __name__ == "__main__":
-  start = datetime(1999, 1, 1, tzinfo=timezone.utc)
+  # start = datetime(1999, 1, 1, tzinfo=timezone.utc)
+  start = datetime(2025, 4, 14, tzinfo=timezone.utc)
   end = datetime.now(timezone.utc)
   step = timedelta(days=120)
   ranges = []

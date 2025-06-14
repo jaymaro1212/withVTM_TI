@@ -53,9 +53,7 @@
       <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="columnDropdown" data-bs-toggle="dropdown" aria-expanded="false">
         Columns
       </button>
-      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="columnDropdown" id="columnToggleMenu">
-        <!-- JS에서 채움 -->
-      </ul>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="columnDropdown" id="columnToggleMenu"></ul>
     </div>
   </div>
 
@@ -179,10 +177,20 @@
     }
 
     const headRow = `<tr>${selectedCols.map(k => `<th>${k}</th>`).join('')}</tr>`;
-    const bodyRows = currentRows.map(row => `<tr>${selectedCols.map(k => `<td>${row[k] ?? ''}</td>`).join('')}</tr>`).join('');
+    const bodyRows = currentRows.map(row => `<tr>${selectedCols.map(k => `<td>${formatCell(row[k])}</td>`).join('')}</tr>`).join('');
 
     document.getElementById("table-head").innerHTML = headRow;
     document.getElementById("table-body").innerHTML = bodyRows;
+  }
+
+  function formatCell(value) {
+    if (Array.isArray(value)) {
+      return value.map(v => typeof v === 'object' ? JSON.stringify(v) : v).join(', ');
+    }
+    if (typeof value === 'object' && value !== null) {
+      return JSON.stringify(value);
+    }
+    return value ?? '';
   }
 
   function toggleColumn(colName) {
